@@ -2,7 +2,7 @@
 Peer - Puristic, Easy and Enjoyable Reference manager
 =====================================================
 
-**Work in progress, bug reports welcome **
+**Work in progress, bug reports welcome**
 
 Aim
 ---
