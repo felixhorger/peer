@@ -5,18 +5,80 @@
 
 """
 
+# Parse arguments
 import argparse
-parser = argparse.ArgumentParser()
-subparsers = parser.add_subparsers(dest="command", help="")
-parser_use = subparsers.add_parser("use", help="")
-parser_use.add_argument("path", metavar="PATH", type=str, help="")
-parser_add = subparsers.add_parser("add", help="")
-parser_add.add_argument("list", metavar="LIST", nargs='+', type=str, help="")
+parser = argparse.ArgumentParser(
+	formatter_class=argparse.RawTextHelpFormatter
+)
+parser.add_argument("--description", action="store_true")
+# Add the command subparser
+subparsers = parser.add_subparsers(dest="command")
+# use
+parser_use = subparsers.add_parser(
+	"use",
+	help="Initialise a new repository or activate an existing one."
+)
+parser_use.add_argument(
+	"path",
+	metavar="PATH",
+	type=str,
+	default='.',
+	help="to the repository."
+)
+# add
+parser_add = subparsers.add_parser(
+	"add",
+	help="Add a document with corresponding DOI to the repository."
+)
+parser_add.add_argument(
+	"refs",
+	metavar="REFS",
+	nargs='+',
+	type=str,
+	help="List file1 DOI1 file2 DOI2 ... "
+	"if adding fails, a message is written into stdout and the filename or DOI"
+	"is written into stderr, depending on the error, no exception will be raised."
+)
+# list
+parser_list = subparsers.add_parser(
+	"list",
+	help="List matching references, see flags."
+)
+parser_list.add_argument(
+	"keywords",
+	metavar="KEYWORDS",
+	nargs='*',
+	type=str,
+	help="List of keywords which must all be present "
+	"in a matching bibtex entry (case sensitive)."
+)
+parser_list.add_argument("-doi", action="store_true", help="Print the DOI.")
+parser_list.add_argument(
+	"-file",
+	action="store_true",
+	help="Print the path to the reference's file."
+)
+parser_list.add_argument("-bib", action="store_true", help="Print the bibtex entry.")
+# Parse
 args = parser.parse_args()
-if args.command is None:
+if args.command is None or parser.description:
 	parser.print_help()
+	if args.description:
+		print(
+			"\n--------------------\n\nReference manager\n\n"
+			"Uses unique DOIs to store references in a database.\n"
+			"Files are copied into the repository and renamed consistently to\n\n"
+			"<root>/<year>/<author><year>.<suffix>\n\n"
+			"Citation keys are automatically generated to <author><year>.\n"
+			"Both the citation key and the filename are augmented with \n"
+			"lower case letters if multiple references lead to the same key.\n"
+			"The user-specific config file is ~/.peerconfig.\n"
+		)
+	#	
+	exit(1)
 #
 
+# Imports
 import sys
 import os
 import requests
@@ -26,7 +88,12 @@ import shutil
 import re
 import string
 
+# Constants
+CONFIG_FILE = os.path.expanduser("~/.peerconfig")
+
+# Helpful functions
 def read_compressed_json(filename):
+	""" zlib compressed json file -> object """
 	with open(filename, "rb") as f:
 		obj = json.loads(zlib.decompress(f.read()).decode())
 	#
@@ -34,14 +101,19 @@ def read_compressed_json(filename):
 #
 
 def write_compressed_json(filename, obj):
+	""" object -> zlib compressed json file """
 	with open(filename, "wb") as f:
 		f.write(zlib.compress(json.dumps(obj).encode()))
 	#
 	return
 #
 
-
 def doi2bib(doi):
+	""" string DOI -> bibtex entry string
+		
+		Loads the bibtex entry from doi.org.
+		Returns empty string if failing to do so.
+	"""
 	website = requests.get(
 		"http://dx.doi.org/" + doi,
 		headers={"accept": "application/x-bibtex"}
@@ -52,8 +124,8 @@ def doi2bib(doi):
 	return website.text
 #
 
-CONFIG_FILE = os.path.expanduser("~/.peerconfig")
 def get_config():
+	""" Returns the peer config in a dictionary """
 	if not os.path.isfile(CONFIG_FILE):
 		config = {}
 	#
@@ -65,7 +137,30 @@ def get_config():
 	return config
 #
 
+def get_active_repository(config):
+	""" Load the active repository.
+	
+	Arguments:
+		> config: dictionary containing the peer config.
+	
+	Returns:
+		> repository: dictionary with DOIs as keys.
+		> bibs_file: the path to the compressed json file
+		  containing repository.
+		> path: to the folder containing the repository.
+	"""	
+	path = config.get("active", None)
+	if path is None:
+		raise Exception("No active repository.")
+	#
+	bibs_file = os.path.join(path, "bibs")
+	repository = read_compressed_json(bibs_file)
+	return repository, bibs_file, path
+#
+
+
 def write_config(config):
+	""" Write the peer config into the respective user-unique file """
 	with open(CONFIG_FILE, "w") as f:
 		json.dump(config, f, sort_keys=True, indent='\t')
 	#
@@ -73,12 +168,16 @@ def write_config(config):
 #
 
 
+
+# Execute commands
 config = get_config()
 if args.command == "use": 
+	# Create the target directory if non-existent
 	path = args.path
 	if not os.path.exists(path):
 		os.makedirs(path)
 	#
+	# Target directory exists, check it and add required files/folders
 	faulty = False
 	if len(os.listdir(path)) == 2:
 		if not (
@@ -95,7 +194,6 @@ if args.command == "use":
 	else:
 		faulty = True
 	#
-
 	if faulty:
 		raise Exception("Given directory does not contain a valid repository.")
 	#
@@ -105,21 +203,22 @@ if args.command == "use":
 	#
 #
 elif args.command == "add":
-	path = config.get("active", None)
-	if path is None:
-		raise Exception("No active repository.")
-	#
-	bibs_file = os.path.join(path, "bibs")
-	repository = read_compressed_json(bibs_file)
-	files_dois = args.list
+	# Check args 
+	files_dois = args.refs
 	l = len(files_dois)
 	if l < 2 or l % 2 != 0:
-		raise Exception("More than two arguments expected.")
+		raise Exception("Even number of more than two arguments expected.")
 	#
-	re_author = re.compile("\s+author[\s={\"]+([a-zA-Z\-\s\.,]+?)\s+and\s+.*")
+	# Get repo and paths
+	repository, bibs_file, path = get_active_repository(config)
+	# Compile regexes for author, year and citation key from bibtex
+	re_author = re.compile("\s+author[\s={\"]+([a-zA-Z\-\s\.,]+?)(\s+and\s+|\s*[\"}]).*")
 	re_year = re.compile("\s*year[\s={\"]+([0-9]+).*")
 	re_key = re.compile("\s*@[a-zA-Z]+{(.*?),.*")
+	# Define letters to augment the citation keys in case of equal author names or
+	# multiple publications in the same year
 	letters = [""] + list(string.ascii_lowercase)
+	# Iterate arguments
 	for i in range(0, l, 2):
 		filepath, doi = files_dois[i:i+2]
 		if doi in repository:
@@ -137,6 +236,7 @@ elif args.command == "add":
 			print("DOI: " + doi, file=sys.stderr)
 			continue
 		#
+		# Parse author, year and citation key from bibtex entry
 		author = None
 		year = None
 		old_citation_key = None
@@ -144,6 +244,7 @@ elif args.command == "add":
 			if author is None:
 				a = re_author.match(line)
 				if a is not None:
+					# Would be too easy if there was a single convention
 					author = a.groups()[0]
 					if ',' in author:
 						author = author.split()[0].replace(',', "")
@@ -175,11 +276,13 @@ elif args.command == "add":
 				#
 			#
 		#
+		# Check if anything wasn't found
 		if any(v is None for v in (author, year, old_citation_key)):
 			print("Could not parse bib of {}.".format(doi))
 			print("DOI: {}".format(doi), file=sys.stderr)
 			continue
 		#
+		# Generate target path
 		target_dir = os.path.join(path, "references", year)
 		if not os.path.exists(target_dir):
 			os.makedirs(target_dir)
@@ -189,13 +292,19 @@ elif args.command == "add":
 			print("TARGET: " + target_dir, file=stderr)
 			continue
 		#
+		# Generate a filename form the citation key
+		found = False
 		for letter in letters:
 			citation_key = author + year + letter
 			if not os.path.exists(os.path.join(target_dir, citation_key)):
+				found = True
 				break
 			#
 		#
-		target_filename = os.path.join(target_dir, citation_key + os.path.splitext(filepath)[1])
+		# Check if successful, sub-optimal but funny
+		if not found:
+			print("How many {}'s have published something in {}? Not supported :P.".format(author, year))
+		#
 		# Modify bib to include citation key
 		if isinstance(old_citation_key, str):
 			bib = bib.replace(old_citation_key, citation_key)
@@ -203,10 +312,32 @@ elif args.command == "add":
 		else:
 			bib = bib[:old_citation_key] + citation_key + bib[old_citation_key:]
 		#
+		# Move file
+		target_filename = os.path.join(target_dir, citation_key + os.path.splitext(filepath)[1])
 		shutil.move(filepath, target_filename)
+		# Add to repo
 		repository[doi] = (target_filename, bib)
 		print("Added {}.".format(doi))
 	#
+	# Save repo
 	write_compressed_json(bibs_file, repository)
+#
+elif args.command == "list":
+	# Get repo
+	repository, _, _ = get_active_repository(config)
+	# Get args
+	keywords = args.keywords
+	doi_flag = args.doi
+	file_flag = args.file
+	bib_flag = args.bib
+	# Filter and print references
+	for (doi, (file, bib)) in repository.items():
+		if all(k in bib for k in keywords): 
+			if doi_flag: print(doi)
+			if file_flag: print(file)
+			if bib_flag: print(bib)
+			print()
+		#
+	#
 #
 
