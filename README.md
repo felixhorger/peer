@@ -2,14 +2,15 @@
 Peer - Puristic, Easy and Enjoyable Reference manager
 =====================================================
 
-**Work in progress**
+**Work in progress, bug reports welcome **
 
 Aim
 ---
-Stores a database of references added by the user, specifying a filename and the corresponding unique DOI.
+Stores documents and bibtex information of references (papers, books, etc.) in a database.
+Users can add documents alongside respective DOIs which are used to uniquely identify a reference.
 Bibtex information is automatically loaded from doi.org (requires internet connection).
 Files are moved into a user-defined directory and renamed consistently.
-Functionality to list, search and open references will follow.
+Functionality to open documents will follow.
 
 Installation
 ------------
