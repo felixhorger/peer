@@ -31,6 +31,12 @@ parser_add = subparsers.add_parser(
 	help="Add a document with corresponding unique key to the repository."
 )
 parser_add.add_argument(
+	"-edit",
+	action="store_true",
+	help="Edit the bibtex before it is parsed, useful if there is an error."
+	"Obsolete if no DOI or arXiv ID is used."
+)
+parser_add.add_argument(
 	"refs",
 	metavar="REFS",
 	nargs='+',
@@ -146,10 +152,8 @@ def arxiv2bib(arxiv_id):
 	#
 	soup = bs4.BeautifulSoup(website.text, "lxml")
 	citation = {
-		"ENTRYTYPE": "article",
 		"archivePrefix": "arXiv",
 		"eprint": arxiv_id,
-		"ID": arxiv_id,
 		"author": []
 	}
 	url = None
@@ -176,12 +180,12 @@ def arxiv2bib(arxiv_id):
 		#
 	#
 	citation["author"] = " and ".join(citation["author"])
-	db = BibDatabase()
-	db.entries = [citation]
-	writer = BibTexWriter()
-	writer.indent = '\t'
-	print(writer.write(db))
-	return writer.write(db), url
+	bib = (
+		"@article{" + arxiv_id + ",\n"
+		+ ",\n".join(["\t{} = {{{}}}".format(key, value) for key, value in citation.items()])
+		+ "\n}"
+	)
+	return bib, url
 #
 
 def get_config():
@@ -228,7 +232,6 @@ def write_config(config):
 #
 
 
-
 # Execute commands
 config = get_config()
 if args.command == "use": 
@@ -264,6 +267,7 @@ if args.command == "use":
 #
 elif args.command == "add":
 	# Check args 
+	edit_flag = args.edit
 	files_and_keys = args.refs
 	l = len(files_and_keys)
 	if l < 2 or l % 2 != 0:
@@ -272,11 +276,61 @@ elif args.command == "add":
 	# Get repo and paths
 	repository, bibs_file, path = get_active_repository(config)
 	# Compile regexes for author, year and citation key from bibtex
-	re_author = re.compile("\s+author[\s={\"]+([\w\-\s\.,]+?)(\s+and\s+|\s*[\"}]).*")
-	re_year = re.compile("\s*year[\s={\"]+([0-9]+).*")
-	re_key = re.compile("\s*@[a-zA-Z]+{(.*?),.*")
-	re_doi = re.compile("[0-9a-zA-Z-]+\.[0-9a-zA-Z-]+/[-\.0-9a-zA-Z]+$")
-	re_arxiv = re.compile("[0-9]{2}(0[1-9]|11|12)\.[0-9]{5}$")
+	re_accent = re.compile(
+		r"{\\("
+			"`"
+			"|'"	
+			"|^"
+			"|\""
+			"|H"
+			"|~"
+			"|c"
+			"|k"
+			"|="
+			"|b"
+			"|\\."
+			"|d"
+			"|r"
+			"|u"
+			"|v"
+		")("
+			"{[a-zA-Z]}"
+			"|[a-zA-Z]"
+		")}"
+	)
+	re_special = re.compile(
+		r"{\\("
+		"l{}"
+		"|l"
+		"|t{[a-zA-Z]{2}}"
+		"|o{}"
+		"|o"
+		"|[ij]"
+		"|aa"
+		"|AA"
+		"|ae"
+		"|AE"
+		"|dh"
+		"|DH"
+		"|dj"
+		"|DJ"
+		"|L"
+		"|l"
+		"|o"
+		"|O"
+		"|oe"
+		"|OE"
+		"|ss"
+		"|th"
+		"|TH"
+		")}"
+	)
+	re_paratheses = re.compile(r"{([a-zA-Z])}")
+	re_author = re.compile(r"\s+author[\s={\"]+([\w\-\s\.,]+?)(\s+and\s+|\s*[\"}]).*")
+	re_year = re.compile(r"\s*year[\s={\"]+([0-9]+).*")
+	re_key = re.compile(r"\s*@[a-zA-Z]+{(.*?),.*")
+	re_doi = re.compile(r"[0-9a-zA-Z-]+\.[0-9a-zA-Z-]+/[-;:\.<>()0-9a-zA-Z]+$")
+	re_arxiv = re.compile(r"[0-9]{2}(0[1-9]|11|12)\.[0-9]{5}$")
 	# Define letters to augment the citation keys in case of equal author names or
 	# multiple publications in the same year
 	letters = [""] + list(string.ascii_lowercase)
@@ -298,6 +352,7 @@ elif args.command == "add":
 
 		# Distinguish between DOI, arxiv and manual
 		download = False
+		bib = ""
 		if re_doi.match(key) is not None:
 			bib = doi2bib(key)
 		#
@@ -305,17 +360,18 @@ elif args.command == "add":
 			bib, url = arxiv2bib(key)
 			download = True
 		#
-		else:
+		if len(bib) == 0 or edit_flag:
 			tmppath = os.path.join(path, "tmpfile")
-			open(tmppath, "w").close()
+			with open(tmppath, "w") as f:
+				f.write(bib)
+			#
 			while True:
 				os.system("vi " + tmppath)
 				with open(tmppath) as f:
 					bib = f.read().strip()
 				#
-				parsed = bibtexparser.loads(bib)
-				if len(parsed.entries) != 1:
-					print("Bibtex invalid, please retry.")
+				if len(bib) == 0:
+					print("Bibtex empty, retry?")
 					if input("(Continue ENTER | Quit q):") == "q":
 						break
 					#
@@ -336,6 +392,12 @@ elif args.command == "add":
 		year = None
 		old_citation_key = None
 		for line in bib.split("\n"):
+			# Remove special characters
+			# Note that bibtexparser.latexenc.latex_to_unicode is actually better,
+			# if it works, can't rely on that
+			line = re_accent.sub(r"\2", line)
+			line = re_special.sub(r"\1", line)
+			line = re_paratheses.sub(r"\1", line)
 			if author is None:
 				a = re_author.match(line)
 				if a is not None:
@@ -371,7 +433,6 @@ elif args.command == "add":
 				#
 			#
 		#
-
 		# Check if anything wasn't found
 		if any(v is None for v in (author, year, old_citation_key)):
 			print("Could not parse bib of {}.".format(key))
@@ -441,13 +502,14 @@ elif args.command == "list":
 	file_flag = args.file
 	nobib_flag = args.nobib
 	# Filter and print references
-	fmt_str = ""
-	if not nobib_flag: fmt_str = "{bib}" + fmt_str
-	if file_flag: fmt_str = "{file}\n" + fmt_str
-	if key_flag: fmt_str = "{key}\n" + fmt_str
+	fmt_str = []
+	if not nobib_flag: fmt_str.append("{bib}")
+	if file_flag: fmt_str.append("{file}")
+	if key_flag: fmt_str.append("{key}")
+	fmt_str = "\n".join(fmt_str)
 	for (key, (file, bib)) in repository.items():
 		if all(k in bib for k in keywords): 
-			print(fmt_str.format(key=key, file=file, bib=bib))
+			print(fmt_str.format(key=key, file=file, bib=bib), "\n")
 		#
 	#
 #
