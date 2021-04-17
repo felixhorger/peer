@@ -95,13 +95,10 @@ import string
 import re
 import zlib
 import json
+import numpy as np
 import requests
 import bs4
 import datetime
-import bibtexparser
-from bibtexparser.bwriter import BibTexWriter
-from bibtexparser.bibdatabase import BibDatabase
-
 
 # Constants
 CONFIG_FILE = os.path.expanduser("~/.peerconfig")
@@ -230,40 +227,12 @@ def write_config(config):
 	return
 #
 
-# Citation key augmentation if there are multiple publications
-# from the same author in the same year
-def gen_letters():
-	""" Generator for letter combinations: '', 'a', 'b', ... 'z', 'aa', 'ab', ... """
-	letters = ("",) + tuple(string.ascii_lowercase)
-	L = len(letters)
-	log_base = np.log(L)
-	i = 0
-	while True:
-		order = int(np.log(max(i,1)) / log_base)
-		for k in range(order, 0, -1):
-			m = L**k
-			if (i % m) == 0:
-				i += m // L
-			#
-		#
-		code = ""
-		j = i
-		for k in range(order, 0, -1):
-			m = L**k
-			code = letters[j // m] + code
-			j = j % m
-		#
-		yield code + letters[j]
-		i += 1
-	#
-	return # Never happening
-#
 
 # Execute commands
 config = get_config()
 if args.command == "use": 
 	# Create the target directory if non-existent
-	path = args.path
+	path = os.path.abspath(args.path)
 	if not os.path.exists(path):
 		os.makedirs(path)
 	#
@@ -358,6 +327,36 @@ elif args.command == "add":
 	re_key = re.compile(r"\s*@[a-zA-Z]+{(.*?),.*")
 	re_doi = re.compile(r"[0-9a-zA-Z-]+\.[0-9a-zA-Z-]+/[-;:\.<>()0-9a-zA-Z]+$")
 	re_arxiv = re.compile(r"[0-9]{2}(0[1-9]|11|12)\.[0-9]{5}$")
+
+	# Citation key augmentation if there are multiple publications
+	# from the same author in the same year
+	def gen_letters():
+		""" Generator for letter combinations: '', 'a', 'b', ... 'z', 'aa', 'ab', ... """
+		letters = ("",) + tuple(string.ascii_lowercase)
+		L = len(letters)
+		log_base = np.log(L)
+		i = 0
+		while True:
+			order = int(np.log(max(i,1)) / log_base)
+			for k in range(order, 0, -1):
+				m = L**k
+				if (i % m) == 0:
+					i += m // L
+				#
+			#
+			code = ""
+			j = i
+			for k in range(order, 0, -1):
+				m = L**k
+				code = letters[j // m] + code
+				j = j % m
+			#
+			yield code + letters[j]
+			i += 1
+		#
+		return # Never happening
+	#
+
 	# Iterate arguments
 	for i in range(0, l, 2):
 		# Check if in repo
@@ -417,8 +416,6 @@ elif args.command == "add":
 		old_citation_key = None
 		for line in bib.split("\n"):
 			# Remove special characters
-			# Note that bibtexparser.latexenc.latex_to_unicode is actually better,
-			# if it works, can't rely on that
 			line = re_accent.sub(r"\2", line)
 			line = re_special.sub(r"\1", line)
 			line = re_paratheses.sub(r"\1", line)
@@ -525,13 +522,13 @@ elif args.command == "list":
 	nobib_flag = args.nobib
 	# Filter and print references
 	fmt_str = []
-	if not nobib_flag: fmt_str.append("{bib}")
 	if file_flag: fmt_str.append("{file}")
 	if key_flag: fmt_str.append("{key}")
+	if not nobib_flag: fmt_str.append("{bib}")
 	fmt_str = "\n".join(fmt_str)
 	for (key, (file, bib)) in repository.items():
 		if all(k in bib for k in keywords): 
-			print(fmt_str.format(key=key, file=file, bib=bib), "\n")
+			print(fmt_str.format(key=key, file=os.path.abspath(file), bib=bib), "\n")
 		#
 	#
 #
