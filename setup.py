@@ -12,4 +12,3 @@ setup(
 	scripts=["scripts/peer"]
 )
 
-rmtree("build")
