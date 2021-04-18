@@ -1,6 +1,8 @@
 
-Peer - Puristic, Easy and Enjoyable Reference manager
+Celsus - Scientific reference manager for those with puristic taste.
 =====================================================
+
+The name is derived from the ancient roman library of Celsus.
 
 **Work in progress, bug reports welcome**
 
@@ -22,7 +24,7 @@ Installation
 Usage
 -----
 
-Run `peer` or `peer --help`
+Run `celsus` or `celsus --help`
 
 
 To Do

@@ -4,11 +4,11 @@ from distutils.core import setup
 from shutil import rmtree
 
 setup(
-	name="Peer",
+	name="celsus",
 	version="1.0",
-	description="Puristic, easy and enjoyable reference-manager.",
+	description="Scientific reference manager for those with puristic taste.",
 	author="Felix Horger",
 	author_email="felix.horger@kcl.ac.uk",
-	scripts=["scripts/peer"]
+	scripts=["scripts/celsus"]
 )
 
