@@ -1,0 +1,379 @@
+#!/usr/bin/env python3
+"""
+
+	Celsus - Scientific reference manager for those with puristic taste.
+
+"""
+
+# Parse arguments
+import argparse
+parser = argparse.ArgumentParser(
+	formatter_class=argparse.RawTextHelpFormatter
+)
+parser.add_argument("--description", action="store_true")
+# Add the command subparser
+subparsers = parser.add_subparsers(dest="command")
+# use
+parser_use = subparsers.add_parser(
+	"use",
+	help="Initialise a new repository or activate an existing one."
+)
+parser_use.add_argument(
+	"path",
+	metavar="PATH",
+	type=str,
+	default='.',
+	help="to the repository."
+)
+# add
+parser_add = subparsers.add_parser(
+	"add",
+	help="Add a document with corresponding unique key to the repository."
+)
+parser_add.add_argument(
+	"-edit",
+	action="store_true",
+	help="Edit the bibtex before it is parsed, useful if there is an error."
+	"Obsolete if no DOI or arXiv ID is used."
+)
+parser_add.add_argument(
+	"refs",
+	metavar="REFS",
+	nargs='+',
+	type=str,
+	help="List file1 key1 file2 key2 ... "
+	"if adding fails, a message is written into stdout and the filename or key "
+	"is written into stderr, depending on the error, no exception will be raised. "
+	"If file is \"-\", it must be an arxiv paper which will be downloaded automatically."
+)
+# list
+parser_list = subparsers.add_parser(
+	"list",
+	help="List matching references, see flags."
+)
+parser_list.add_argument(
+	"keywords",
+	metavar="KEYWORDS",
+	nargs='*',
+	type=str,
+	help="List of keywords which must all be present "
+	"in a matching bibtex entry (case sensitive)."
+)
+parser_list.add_argument("-key", action="store_true", help="Print the key.")
+parser_list.add_argument(
+	"-file",
+	action="store_true",
+	help="Print the path to the reference's file."
+)
+parser_list.add_argument("-nobib", action="store_true", help="Don't print the bibtex entry.")
+parser_list.add_argument(
+	"-open",
+	action="store_true",
+	help="Open the documents."
+)
+# config
+parser_config = subparsers.add_parser("config")
+parser_config.add_argument(
+	"-editor",
+	type=str,
+	help="Command to open the preferred editor, e.g. vi or nano."
+)
+parser_config.add_argument(
+	"-viewer",
+	type=str,
+	help="Command for opening documents (mostly pdf), e.g. evince."
+)
+# Parse
+args = parser.parse_args()
+if args.command is None or parser.description:
+	parser.print_help()
+	if args.description:
+		print(
+			"\n--------------------\n\nReference manager\n\n"
+			"Uses unique keys to store scientific references in a database.\n"
+			"Keys can be DOIs, arXiv IDs (without the arXiv: prefix!) or manually determined.\n"
+			"The bibtex citation is automatically loaded from doi.org, arxiv.org or can be added manually.\n"
+			"Files are copied into the repository and renamed consistently to\n\n"
+			"<root>/<year>/<author><year>.<suffix>\n\n"
+			"Citation keys are automatically generated to <author><year>.\n"
+			"Both the citation key and the filename are augmented with \n"
+			"lower case letters if multiple references lead to the same key.\n"
+			"The user-specific config file is ~/.celsusconfig.\n"
+		)
+	#
+	exit(1)
+#
+
+
+# Imports
+import sys
+import os
+import subprocess
+import shutil
+import requests
+import celsus
+from celsus import compressed_json
+from celsus.config import (
+	get_config,
+	write_config,
+	get_active_repository
+)
+from celsus.bibtex import (
+	parse,
+	doi2bib, arxiv2bib,
+	is_doi, is_arxiv,
+	empty_bib_article,
+	gen_letters
+)
+from celsus.latex import is_ascii, unicode_to_latex
+
+
+# Execute commands
+config = get_config()
+if args.command == "use": 
+	# Create the target directory if non-existent
+	path = os.path.abspath(args.path)
+	if not os.path.exists(path):
+		os.makedirs(path)
+	#
+	# Target directory exists, check it and add required files/folders
+	faulty = False
+	if len(os.listdir(path)) == 2:
+		if not (
+		os.path.isfile(os.path.join(path, "bibs"))
+		and os.path.isdir(os.path.join(path, "references"))
+		):
+			faulty = True
+		#
+	#
+	elif len(os.listdir(path)) == 0:
+		os.mkdir(os.path.join(path, "references"))
+		compressed_json.write(os.path.join(path, "bibs"), {})
+	#
+	else:
+		faulty = True
+	#
+	if faulty:
+		raise Exception("Given directory does not contain a valid repository.")
+	#
+	else:
+		config["active"] = path
+		write_config(config)
+	#
+#
+elif args.command == "add":
+	# Check args 
+	edit_flag = args.edit
+	files_and_keys = args.refs
+	l = len(files_and_keys)
+	if l < 2 or l % 2 != 0:
+		raise Exception("Even number of more than two arguments expected.")
+	#
+	# Get repo and paths
+	repository, bibs_file, path = get_active_repository(config)
+
+	# Iterate arguments
+	for i in range(0, l, 2):
+		# Check if in repo
+		filepath, key = files_and_keys[i:i+2]
+		if key in repository:
+			print("Reference already loaded.")
+			continue
+		#
+
+		# Check if file is present
+		if (not filepath == '-') and (not os.path.exists(filepath)):
+			print("File not found \"{}\".".format(filepath))
+			print("FILE: " + filepath, file=sys.stderr)
+			continue
+		#
+
+		# Distinguish between DOI, arxiv and manual
+		download = False
+		bib = ""
+		if is_doi(key) is not None:
+			bib = doi2bib(key)
+		#
+		elif is_arxiv(key) is not None:
+			bib, url = arxiv2bib(key)
+			download = True
+		#
+
+		# Check if manual adjustment is required
+		has_non_ascii = is_ascii(bib)
+		if len(bib) == 0 or has_non_ascii or edit_flag: 
+			if not edit_flag:
+				# Ask user what to do
+				ui = input(
+					"Could not retrieve valid bibtex for {} {}"
+					", adjust manually? (Skip=S, Open+Edit=O, Edit) ".format(filepath, key)
+				)
+				if ui == 'S': 
+					print("{}.".format(key), file=sys.stderr)
+					continue
+				#
+				if ui == 'O': subprocess.Popen(
+					(config["viewer"], filepath),
+					stdout=subprocess.DEVNULL,
+					stderr=subprocess.DEVNULL
+				)
+			#
+			else:
+				subprocess.Popen(
+					(config["viewer"], filepath),
+					stdout=subprocess.DEVNULL,
+					stderr=subprocess.DEVNULL
+				)
+			#
+			# Change bib to something more reasonable
+			if len(bib) == 0:
+				bib = empty_bib_article
+			#
+			elif has_non_ascii:
+				bib = unicode_to_latex(
+					bib,
+					non_ascii_only=True,
+					replacement_latex_protection="braces-all",
+					unknown_char_warning=False
+				)
+			#
+			tmppath = os.path.join(path, "tmpfile")
+			with open(tmppath, "w") as f:
+				f.write(bib)
+			#
+			while True:
+				proc = subprocess.run((config["editor"], tmppath))
+				if proc.returncode != 0:
+					print("Editor could not be opened successfully.", file=stderr)
+					bib = ""
+					break
+				#
+				with open(tmppath) as f:
+					bib = f.read().strip()
+				#
+				if len(bib) == 0:
+					if input("Bibtex empty, retry? (Skip=S, Yes) ") == "S":
+						break
+					#
+					continue
+				#
+				break
+			#
+			os.remove(tmppath)
+		#
+		if len(bib) == 0:
+			print("Could not load bib from key \"{}\".".format(key))
+			print("" + key, file=sys.stderr)
+			continue
+		#
+
+		# Parse and check if anything wasn't found or if author contains any non-ascii chars
+		old_citation_key, author, year = parse(bib)
+		if (
+		any(v is None for v in (author, year, old_citation_key))
+		or is_ascii(author)
+		):
+			print("Could not parse bib of {}.".format(key))
+			print("" + key, file=sys.stderr)
+			continue
+		#
+		
+		# Generate a filename form the citation key
+		target_dir = os.path.join(path, "references", year)
+		found = False
+		extension = os.path.splitext(filepath)[1]
+		for letter in gen_letters():
+			citation_key = author + year + letter
+			target_filename = os.path.join(target_dir, citation_key + extension)
+			if not os.path.exists(target_filename):
+				found = True
+				break
+			#
+		#
+
+		# Modify bib to include citation key
+		if isinstance(old_citation_key, str):
+			bib = bib.replace(old_citation_key, citation_key, 1)
+		#
+		else: # In this case the key is integer, indicating where the key should be
+			bib = bib[:old_citation_key] + citation_key + bib[old_citation_key:]
+		#
+
+		# Download file if required
+		if filepath == '-':
+			website = requests.get(url)
+			if not website.ok:
+				print("Could not load pdf from arXiv: {}.".format(url))
+				print("" + key, file=sys.stderr)
+				continue
+			#
+			filepath = os.path.join(path, "tmpfile.pdf")
+			with open(filepath, "wb") as f:
+				f.write(website.content)
+			#
+		#
+		# Move file
+		try:
+			# Generate target path
+			if not os.path.exists(target_dir):
+				os.makedirs(target_dir)
+			#
+			# Move file
+			shutil.move(filepath, target_filename)
+		#
+		except:
+			print("Could not move file {} to {}.".format(filepath, target_filename))
+			print("{}".format(key), file=sys.stderr)
+			continue
+		#
+
+		# Add to repo
+		repository[key] = (target_filename, bib)
+		# Save changes
+		compressed_json.write(bibs_file, repository)
+		print("Added {}.".format(key))
+	#
+#
+elif args.command == "list":
+	# Get repo
+	repository, _, _ = get_active_repository(config)
+	# Set up format string 
+	fmt_str = []
+	if args.file: fmt_str.append("{file}")
+	if args.key: fmt_str.append("{key}")
+	if not args.nobib: fmt_str.append("{bib}")
+	fmt_str = "\n".join(fmt_str)
+	# Set up mechanism to open files if required
+	to_open = []
+	remember_file = (
+		(lambda file: to_open.append(file))
+		if args.open else
+		(lambda file: None)
+	)
+	# Search and print
+	keywords = args.keywords
+	for (key, (file, bib)) in repository.items():
+		if all(k in bib for k in keywords): 
+			print(fmt_str.format(key=key, file=os.path.abspath(file), bib=bib), "\n")
+			remember_file(file)
+		#
+	#
+	if not args.open: exit(0)
+	# Open files
+	number_of_files = len(to_open)
+	if number_of_files > 10:
+		if input("Open {} files? (Yes=Y, No) ".format(number_of_files)) == "":
+			exit(0)
+		#
+	#
+	viewer = config["viewer"]
+	for file in to_open:
+		subprocess.Popen((viewer, file), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+	#
+#
+elif args.command == "config":
+	if args.editor is not None: config["editor"] = args.editor
+	if args.viewer is not None: config["viewer"] = args.viewer
+	write_config(config)
+#
+
