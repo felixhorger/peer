@@ -66,6 +66,23 @@ parser_list.add_argument(
 	help="Print the path to the reference's file."
 )
 parser_list.add_argument("-nobib", action="store_true", help="Don't print the bibtex entry.")
+parser_list.add_argument(
+	"-open",
+	action="store_true",
+	help="Open the documents."
+)
+# config
+parser_config = subparsers.add_parser("config")
+parser_config.add_argument(
+	"-editor",
+	type=str,
+	help="Command to open the preferred editor, e.g. vi or nano."
+)
+parser_config.add_argument(
+	"-viewer",
+	type=str,
+	help="Command for opening documents (mostly pdf), e.g. evince."
+)
 # Parse
 args = parser.parse_args()
 if args.command is None or parser.description:
@@ -90,15 +107,18 @@ if args.command is None or parser.description:
 # Imports
 import sys
 import os
+import subprocess
 import shutil
+import zlib
 import string
 import re
-import zlib
 import json
-import numpy as np
 import requests
 import bs4
+import numpy as np
 import datetime
+from pylatexenc.latexencode import unicode_to_latex
+
 
 # Constants
 CONFIG_FILE = os.path.expanduser("~/.peerconfig")
@@ -195,6 +215,8 @@ def get_config():
 			config = json.load(f)
 		#
 	#
+	if config.get("editor") is None: config["editor"] = "vi"
+	if config.get("viewer") is None: config["viewer"] = "evince"
 	return config
 #
 
@@ -275,7 +297,7 @@ elif args.command == "add":
 	re_accent = re.compile(
 		r"{\\("
 			"`"
-			"|'"	
+			"|'"
 			"|^"
 			"|\""
 			"|H"
@@ -383,19 +405,72 @@ elif args.command == "add":
 			bib, url = arxiv2bib(key)
 			download = True
 		#
-		if len(bib) == 0 or edit_flag:
+
+		# Check if manual adjustment is required
+		has_non_ascii = any(ord(c) >= 128 for c in bib)
+		if len(bib) == 0 or has_non_ascii or edit_flag: 
+			if not edit_flag:
+				# Ask user what to do
+				ui = input(
+					"Could not retrieve valid bibtex for {} {}"
+					", adjust manually? (Skip=S, Open+Edit=O, Edit) ".format(filepath, key)
+				)
+				if ui == 'S': 
+					print("{}.".format(key), file=sys.stderr)
+					continue
+				#
+				if ui == 'O': subprocess.Popen(
+					(config["viewer"], filepath),
+					stdout=subprocess.DEVNULL,
+					stderr=subprocess.DEVNULL
+				)
+			#
+			else:
+				subprocess.Popen(
+					(config["viewer"], filepath),
+					stdout=subprocess.DEVNULL,
+					stderr=subprocess.DEVNULL
+				)
+			#
+			# Change bib to something more reasonable
+			if len(bib) == 0:
+				bib = "@article{,\n"
+				"\tdoi = {},\n"
+				"\turl = {},\n"
+				"\tyear = {},\n"
+				"\tmonth = {},\n"
+				"\tpublisher = {},\n"
+				"\tvolume = {},\n"
+				"\tnumber = {},\n"
+				"\tpages = {},\n"
+				"\tauthor = {},\n"
+				"\ttitle = {},\n"
+				"\tjournal = {}\n}"
+			#
+			elif has_non_ascii:
+				bib = unicode_to_latex(
+					bib,
+					non_ascii_only=True,
+					replacement_latex_protection="braces-all",
+					unknown_char_warning=False
+				)
+			#
 			tmppath = os.path.join(path, "tmpfile")
 			with open(tmppath, "w") as f:
 				f.write(bib)
 			#
 			while True:
-				os.system("vi " + tmppath)
+				proc = subprocess.run((config["editor"], tmppath))
+				if proc.returncode != 0:
+					print("Editor could not be opened successfully.", file=stderr)
+					bib = ""
+					break
+				#
 				with open(tmppath) as f:
 					bib = f.read().strip()
 				#
 				if len(bib) == 0:
-					print("Bibtex empty, retry?")
-					if input("(Continue ENTER | Quit q):") == "q":
+					if input("Bibtex empty, retry? (Skip=S, Yes) ") == "S":
 						break
 					#
 					continue
@@ -406,7 +481,7 @@ elif args.command == "add":
 		#
 		if len(bib) == 0:
 			print("Could not load bib from key \"{}\".".format(key))
-			print("KEY: " + key, file=sys.stderr)
+			print("" + key, file=sys.stderr)
 			continue
 		#
 
@@ -454,12 +529,17 @@ elif args.command == "add":
 				#
 			#
 		#
-		# Check if anything wasn't found
-		if any(v is None for v in (author, year, old_citation_key)):
+
+		# Check if anything wasn't found or if author contains any non-ascii chars
+		if (
+		any(v is None for v in (author, year, old_citation_key))
+		or any(ord(c) >= 128 for c in author)
+		):
 			print("Could not parse bib of {}.".format(key))
-			print("KEY: " + key, file=sys.stderr)
+			print("" + key, file=sys.stderr)
 			continue
 		#
+		
 		# Generate a filename form the citation key
 		target_dir = os.path.join(path, "references", year)
 		found = False
@@ -467,7 +547,7 @@ elif args.command == "add":
 		for letter in gen_letters():
 			citation_key = author + year + letter
 			target_filename = os.path.join(target_dir, citation_key + extension)
-			if not os.path.exists(os.path.join(target_dir, citation_key)):
+			if not os.path.exists(target_filename):
 				found = True
 				break
 			#
@@ -484,7 +564,7 @@ elif args.command == "add":
 			website = requests.get(url)
 			if not website.ok:
 				print("Could not load pdf from arXiv: {}.".format(url))
-				print("KEY: " + key, file=sys.stderr)
+				print("" + key, file=sys.stderr)
 				continue
 			#
 			filepath = os.path.join(path, "tmpfile.pdf")
@@ -502,34 +582,56 @@ elif args.command == "add":
 		#
 		except:
 			print("Could not move file {} to {}.".format(filepath, target_filename))
-			print("KEY: {}".format(key), file=sys.stderr)
+			print("{}".format(key), file=sys.stderr)
 			continue
 		#
 		# Add to repo
 		repository[key] = (target_filename, bib)
+		# Save changes
+		write_compressed_json(bibs_file, repository)
 		print("Added {}.".format(key))
 	#
-	# Save repo
-	write_compressed_json(bibs_file, repository)
 #
 elif args.command == "list":
 	# Get repo
 	repository, _, _ = get_active_repository(config)
-	# Get args
-	keywords = args.keywords
-	key_flag = args.key
-	file_flag = args.file
-	nobib_flag = args.nobib
-	# Filter and print references
+	# Set up format string 
 	fmt_str = []
-	if file_flag: fmt_str.append("{file}")
-	if key_flag: fmt_str.append("{key}")
-	if not nobib_flag: fmt_str.append("{bib}")
+	if args.file: fmt_str.append("{file}")
+	if args.key: fmt_str.append("{key}")
+	if not args.nobib: fmt_str.append("{bib}")
 	fmt_str = "\n".join(fmt_str)
+	# Set up mechanism to open files if required
+	to_open = []
+	remember_file = (
+		(lambda file: to_open.append(file))
+		if args.open else
+		(lambda file: None)
+	)
+	# Search and print
+	keywords = args.keywords
 	for (key, (file, bib)) in repository.items():
 		if all(k in bib for k in keywords): 
 			print(fmt_str.format(key=key, file=os.path.abspath(file), bib=bib), "\n")
+			remember_file(file)
 		#
 	#
+	if not args.open: exit(0)
+	# Open files
+	number_of_files = len(to_open)
+	if number_of_files > 10:
+		if not input("Open {} files? (Yes=Y, No) ".format(number_of_files)) == "":
+			exit(0)
+		#
+	#
+	viewer = config["viewer"]
+	for file in to_open:
+		subprocess.Popen((viewer, file), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+	#
+#
+elif args.command == "config":
+	if args.editor is not None: config["editor"] = args.editor
+	if args.viewer is not None: config["viewer"] = args.viewer
+	write_config(config)
 #
 
