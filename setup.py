@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 from distutils.core import setup
-from shutil import rmtree
 
 setup(
 	name="celsus",
@@ -9,6 +8,9 @@ setup(
 	description="Scientific reference manager for those with puristic taste.",
 	author="Felix Horger",
 	author_email="felix.horger@kcl.ac.uk",
-	scripts=["scripts/celsus"]
+	packages=["celsus"],
+	py_modules=["celsus.config", "celsus.latex", "celsus.bibtex", "celsus.compressed_json"],
+	scripts=["scripts/celsus"],
+	install_requires=["requests", "pylatexenc"]
 )
 

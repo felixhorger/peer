@@ -1,6 +1,6 @@
 
 Celsus - Scientific reference manager for those with puristic taste.
-=====================================================
+====================================================================
 
 The name is derived from the ancient roman library of Celsus.
 
