@@ -1,16 +1,26 @@
-#!/usr/bin/env python
+import setuptools
 
-from distutils.core import setup
+with open("README.md", "r") as f:
+	long_description = f.read()
+#
 
-setup(
+setuptools.setup(
 	name="celsus",
 	version="1.0",
 	description="Scientific reference manager for those with puristic taste.",
+	long_description=long_description,
 	author="Felix Horger",
 	author_email="felix.horger@kcl.ac.uk",
+	url="https://github.com/felixhorger/celsus.git",
+	classifiers=[
+		"Programming Language :: Python :: 3",
+		"License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+		"Operating System :: Linux"
+	]
 	packages=["celsus"],
-	py_modules=["celsus.config", "celsus.latex", "celsus.bibtex", "celsus.compressed_json"],
+	py_modules=["celsus.load", "celsus.latex", "celsus.bibtex"],
 	scripts=["scripts/celsus"],
-	install_requires=["requests", "pylatexenc"]
+	install_requires=["requests", "pylatexenc", "pdftotext"],
+	python_requires=">=3.6"
 )
 
