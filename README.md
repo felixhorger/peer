@@ -11,8 +11,7 @@ Aim
 Stores documents and bibtex information of scientific references (papers, books, etc.) in a database.
 Users can add documents alongside unique keys which can be DOIs, arXiv IDs or manually defined expressions.
 Bibtex information is automatically loaded from doi.org, arxiv.org or can be added manually.
-Files are moved into a user-defined directory and renamed consistently.
-Functionality to open documents will follow.
+Files are sorted in a user-defined directory and renamed consistently.
 
 Installation
 ------------
@@ -30,7 +29,5 @@ Run `celsus` or `celsus --help`
 To Do
 -----
 - Enable entry deletion and modification.
-- Set up template for manual bibtex entry.
-- Outsource functionality, create module which is used by the script.
 - Incorporate automatic DOI and arXiv ID finder (from pdf).
 
