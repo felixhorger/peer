@@ -112,11 +112,12 @@ import subprocess
 import shutil
 import requests
 import celsus
-from celsus import compressed_json
-from celsus.config import (
+from celsus.load import (
 	get_config,
 	write_config,
-	get_active_repository
+	get_active_repository,
+	ONLY_KEY, BIB, BIB_AND_CONTENT,
+	write_celsus_file
 )
 from celsus.bibtex import (
 	parse,
@@ -125,7 +126,7 @@ from celsus.bibtex import (
 	empty_bib_article,
 	gen_letters
 )
-from celsus.latex import is_ascii, unicode_to_latex
+from celsus.latex import is_non_ascii, unicode_to_latex
 
 
 # Execute commands
@@ -133,33 +134,9 @@ config = get_config()
 if args.command == "use": 
 	# Create the target directory if non-existent
 	path = os.path.abspath(args.path)
-	if not os.path.exists(path):
-		os.makedirs(path)
-	#
-	# Target directory exists, check it and add required files/folders
-	faulty = False
-	if len(os.listdir(path)) == 2:
-		if not (
-		os.path.isfile(os.path.join(path, "bibs"))
-		and os.path.isdir(os.path.join(path, "references"))
-		):
-			faulty = True
-		#
-	#
-	elif len(os.listdir(path)) == 0:
-		os.mkdir(os.path.join(path, "references"))
-		compressed_json.write(os.path.join(path, "bibs"), {})
-	#
-	else:
-		faulty = True
-	#
-	if faulty:
-		raise Exception("Given directory does not contain a valid repository.")
-	#
-	else:
-		config["active"] = path
-		write_config(config)
-	#
+	if not os.path.exists(path): os.makedirs(path)
+	config["active"] = path
+	write_config(config)
 #
 elif args.command == "add":
 	# Check args 
@@ -170,7 +147,7 @@ elif args.command == "add":
 		raise Exception("Even number of more than two arguments expected.")
 	#
 	# Get repo and paths
-	repository, bibs_file, path = get_active_repository(config)
+	repository, path = get_active_repository(config, load=ONLY_KEY)
 
 	# Iterate arguments
 	for i in range(0, l, 2):
@@ -181,105 +158,131 @@ elif args.command == "add":
 			continue
 		#
 
-		# Check if file is present
-		if (not filepath == '-') and (not os.path.exists(filepath)):
-			print("File not found \"{}\".".format(filepath))
-			print("FILE: " + filepath, file=sys.stderr)
-			continue
-		#
-
 		# Distinguish between DOI, arxiv and manual
+		manual = False
 		download = False
 		bib = ""
 		if is_doi(key) is not None:
-			bib = doi2bib(key)
+			get_bib = lambda key: (doi2bib(key), "")
 		#
 		elif is_arxiv(key) is not None:
-			bib, url = arxiv2bib(key)
+			get_bib = lambda key: arxiv2bib(key)			
 			download = True
+		#
+		else:
+			get_bib = lambda key: (empty_bib_article, "")	
+			manual = True
+		#
+
+		# Check if file is present
+		if not ((filepath == '-' and download) or os.path.exists(filepath)):
+			print("File not found \"{}\".".format(filepath))
+			print(key, file=sys.stderr)
+			continue
+		#
+
+		while True:
+			bib, url = get_bib(key)
+			if len(bib) != 0: break
+			ui = input(
+				"Could not retrieve valid bibtex for {}"
+				", retry? (Continue=c, Retry) ".format(filepath)
+			)
+			if ui == 'c': 
+				print(key, file=sys.stderr)
+				break
+			#
 		#
 
 		# Check if manual adjustment is required
-		has_non_ascii = is_ascii(bib)
-		if len(bib) == 0 or has_non_ascii or edit_flag: 
-			if not edit_flag:
-				# Ask user what to do
-				ui = input(
-					"Could not retrieve valid bibtex for {} {}"
-					", adjust manually? (Skip=S, Open+Edit=O, Edit) ".format(filepath, key)
-				)
-				if ui == 'S': 
-					print("{}.".format(key), file=sys.stderr)
-					continue
+		while True:
+			has_non_ascii = is_non_ascii(bib)
+			if len(bib) == 0 or has_non_ascii or manual or edit_flag: 
+				if not edit_flag:
+					# Ask user what to do
+					ui = input(
+						"Received invalid bibtex for {}"
+						", adjust manually? (Skip=s, Open+Edit=o, Edit) ".format(filepath)
+					)
+					if ui == 's': 
+						print(key, file=sys.stderr)
+						bib = ""
+						break
+					#
+					if ui == 'o': subprocess.Popen(
+						(config["viewer"], filepath),
+						stdout=subprocess.DEVNULL,
+						stderr=subprocess.DEVNULL
+					)
 				#
-				if ui == 'O': subprocess.Popen(
-					(config["viewer"], filepath),
-					stdout=subprocess.DEVNULL,
-					stderr=subprocess.DEVNULL
-				)
-			#
-			else:
-				subprocess.Popen(
-					(config["viewer"], filepath),
-					stdout=subprocess.DEVNULL,
-					stderr=subprocess.DEVNULL
-				)
-			#
-			# Change bib to something more reasonable
-			if len(bib) == 0:
-				bib = empty_bib_article
-			#
-			elif has_non_ascii:
-				bib = unicode_to_latex(
-					bib,
-					non_ascii_only=True,
-					replacement_latex_protection="braces-all",
-					unknown_char_warning=False
-				)
-			#
-			tmppath = os.path.join(path, "tmpfile")
-			with open(tmppath, "w") as f:
-				f.write(bib)
-			#
-			while True:
+				else:
+					subprocess.Popen(
+						(config["viewer"], filepath),
+						stdout=subprocess.DEVNULL,
+						stderr=subprocess.DEVNULL
+					)
+				#
+				# Change bib to something more reasonable
+				if len(bib) == 0:
+					bib = empty_bib_article
+				#
+				elif has_non_ascii:
+					bib = unicode_to_latex(
+						bib,
+						non_ascii_only=True,
+						replacement_latex_protection="braces-all",
+						unknown_char_warning=False
+					)
+				#
+				tmppath = os.path.join(path, "tmpfile")
+				with open(tmppath, "w") as f:
+					f.write(bib)
+				#
 				proc = subprocess.run((config["editor"], tmppath))
 				if proc.returncode != 0:
 					print("Editor could not be opened successfully.", file=stderr)
 					bib = ""
 					break
 				#
-				with open(tmppath) as f:
+				with open(tmppath, "r") as f:
 					bib = f.read().strip()
 				#
-				if len(bib) == 0:
-					if input("Bibtex empty, retry? (Skip=S, Yes) ") == "S":
-						break
-					#
-					continue
-				#
+				os.remove(tmppath)
+			#
+			# Parse and check if anything wasn't found or if author contains any non-ascii chars
+			old_citation_key, author, year = parse(bib)
+			if ( 
+			any(v is None for v in (author, year, old_citation_key))
+			or is_non_ascii(author)
+			):
+				manual = True
+			#
+			else:
 				break
 			#
-			os.remove(tmppath)
 		#
 		if len(bib) == 0:
-			print("Could not load bib from key \"{}\".".format(key))
-			print("" + key, file=sys.stderr)
+			print("Could not load bib from key {}.".format(key))
+			print(key, file=sys.stderr)
 			continue
 		#
 
-		# Parse and check if anything wasn't found or if author contains any non-ascii chars
-		old_citation_key, author, year = parse(bib)
-		if (
-		any(v is None for v in (author, year, old_citation_key))
-		or is_ascii(author)
-		):
-			print("Could not parse bib of {}.".format(key))
-			print("" + key, file=sys.stderr)
-			continue
+		# Download file if required
+		if filepath == '-':
+			website = requests.get(url)
+			if not website.ok:
+				print("Could not load pdf from arXiv: {}.".format(url))
+				print("" + key, file=sys.stderr)
+				continue
+			#
+			filepath = os.path.join(path, "tmpfile.pdf")
+			with open(filepath, "wb") as f:
+				f.write(website.content)
+			#
 		#
-		
+
 		# Generate a filename form the citation key
-		target_dir = os.path.join(path, "references", year)
+		target_dir = os.path.join(path, year)
 		found = False
 		extension = os.path.splitext(filepath)[1]
 		for letter in gen_letters():
@@ -299,44 +302,32 @@ elif args.command == "add":
 			bib = bib[:old_citation_key] + citation_key + bib[old_citation_key:]
 		#
 
-		# Download file if required
-		if filepath == '-':
-			website = requests.get(url)
-			if not website.ok:
-				print("Could not load pdf from arXiv: {}.".format(url))
-				print("" + key, file=sys.stderr)
-				continue
-			#
-			filepath = os.path.join(path, "tmpfile.pdf")
-			with open(filepath, "wb") as f:
-				f.write(website.content)
-			#
-		#
 		# Move file
 		try:
 			# Generate target path
-			if not os.path.exists(target_dir):
-				os.makedirs(target_dir)
-			#
+			if not os.path.exists(target_dir): os.makedirs(target_dir)
 			# Move file
 			shutil.move(filepath, target_filename)
 		#
 		except:
 			print("Could not move file {} to {}.".format(filepath, target_filename))
-			print("{}".format(key), file=sys.stderr)
+			print(key, file=sys.stderr)
 			continue
 		#
 
-		# Add to repo
-		repository[key] = (target_filename, bib)
 		# Save changes
-		compressed_json.write(bibs_file, repository)
+		write_celsus_file(target_filename, key, bib)
+
+		# Add to repo
+		target_filename = target_filename[len(path)]
+		if target_filename[0] == '/': target_filename = target_filename[1:]
+		repository[key] = (target_filename, "", "")
 		print("Added {}.".format(key))
 	#
 #
 elif args.command == "list":
 	# Get repo
-	repository, _, _ = get_active_repository(config)
+	repository, _ = get_active_repository(config, load=BIB) # TODO
 	# Set up format string 
 	fmt_str = []
 	if args.file: fmt_str.append("{file}")
@@ -352,7 +343,7 @@ elif args.command == "list":
 	)
 	# Search and print
 	keywords = args.keywords
-	for (key, (file, bib)) in repository.items():
+	for (key, (file, bib)) in repository.items(): # TODO
 		if all(k in bib for k in keywords): 
 			print(fmt_str.format(key=key, file=os.path.abspath(file), bib=bib), "\n")
 			remember_file(file)

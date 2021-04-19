@@ -64,7 +64,7 @@ re_special = re.compile(
 re_paratheses = re.compile(r"{([a-zA-Z])}")
 
 # Functions
-def is_ascii(s):
+def is_non_ascii(s):
 	return any(ord(c) >= 128 for c in s)
 #
 
