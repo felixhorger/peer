@@ -16,7 +16,7 @@ setuptools.setup(
 		"Programming Language :: Python :: 3",
 		"License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
 		"Operating System :: Linux"
-	]
+	],
 	packages=["celsus"],
 	py_modules=["celsus.load", "celsus.latex", "celsus.bibtex"],
 	scripts=["scripts/celsus"],
