@@ -37,14 +37,25 @@ parser_add.add_argument(
 	"Obsolete if no DOI or arXiv ID is used."
 )
 parser_add.add_argument(
+	"-from",
+	type=str,
+	help=(
+		"Directory from which to add *.pdf files recursively."
+		+ " Positional arguments are ignored if set."
+	),
+	dest="from_dir"
+)
+parser_add.add_argument(
 	"refs",
 	metavar="REFS",
-	nargs='+',
+	nargs='*',
 	type=str,
-	help="List file1 key1 file2 key2 ... "
+	help=(
+	"List file1 key1 file2 key2 ... "
 	"if adding fails, a message is written into stdout and the filename or key "
 	"is written into stderr, depending on the error, no exception will be raised. "
 	"If file is \"-\", it must be an arxiv paper which will be downloaded automatically."
+	)
 )
 # list
 parser_list = subparsers.add_parser(
@@ -156,11 +167,35 @@ if args.command == "use":
 elif args.command == "add":
 	# Check args
 	edit_flag = args.edit
-	files_and_keys = args.refs
-	l = len(files_and_keys)
-	if l < 2 or l % 2 != 0:
-		raise Exception("Even number of more than two arguments expected.")
+	if args.from_dir is None:
+		files_and_keys = args.refs
+		l = len(files_and_keys)
+		if l < 2 or l % 2 != 0:
+			raise Exception("Even number of more than two arguments expected.")
+		#
 	#
+	else:
+		if not os.path.exists(args.from_dir): raise Exception("Directory does not exist.")
+		files_and_keys = []
+		for root, dirs, files in os.walk(args.from_dir):
+			for filename in files:
+				if filename.endswith(".pdf"):
+					filepath = os.path.join(root, filename)
+					# TODO: Try to determine DOI/arxiv ID
+					subprocess.Popen(
+						(config["viewer"], filepath),
+						stdout=subprocess.DEVNULL,
+						stderr=subprocess.DEVNULL
+					)
+					key = input("Please enter the key of {} (Skip): ".format(filepath))
+					if not len(key): continue
+					files_and_keys.extend((filepath, key))
+				#
+			#
+		#
+		l = len(files_and_keys)
+	#
+
 	# Get repo and paths
 	repository, path = get_active_repository(config, load=ONLY_KEY)
 
@@ -177,15 +212,14 @@ elif args.command == "add":
 		manual = False
 		download = False
 		bib = ""
-		if is_doi(key) is not None:
+		if is_doi(key):
 			get_bib = lambda key: (doi2bib(key), "")
 		#
-		elif is_arxiv(key) is not None:
+		elif is_arxiv(key):
 			get_bib = lambda key: arxiv2bib(key)
 			download = True
 		#
 		else:
-			get_bib = lambda key: (empty_bib_article, "")
 			manual = True
 		#
 
@@ -196,7 +230,8 @@ elif args.command == "add":
 			continue
 		#
 
-		while True:
+		# Download bib
+		while not manual: # Sneaky
 			bib, url = get_bib(key)
 			if len(bib) != 0: break
 			ui = input(
