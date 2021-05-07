@@ -16,6 +16,10 @@ Files are sorted in a user-defined directory and renamed consistently.
 Installation
 ------------
 
+`pip install -i https://test.pypi.org/simple/ celsus`
+
+or
+
 1. `git clone` this repository.
 2. `cd` to the root directory of the repository.
 3. `python3 setup.py install --user`
@@ -29,5 +33,4 @@ Run `celsus` or `celsus --help`
 To Do
 -----
 - Enable entry deletion and modification.
-- Incorporate automatic DOI and arXiv ID finder (from pdf).
 

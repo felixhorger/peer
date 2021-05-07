@@ -10,10 +10,11 @@
 		- Get the citation key, author and year
 		  of the publication (LaTex expressions NOT supported).
 		- Check if a code is DOI or arXiv ID.
+		- Get DOI or arXiv ID from pdf.
 
 	Regexes:
 		- re_author, re_year: match author and year.
-		- re_key: match the citation key.
+		- re_citation_key: match the citation key.
 		- re_doi: match if the code is a DOI.
 		- re_arxiv: match if the code is an arXiv ID, without the "arXiv:" prefix.
 
@@ -28,6 +29,7 @@ import datetime
 import re
 import string
 from math import log
+from pdfminer.high_level import extract_text 
 import celsus
 from celsus.latex import to_ascii
 
@@ -51,9 +53,9 @@ empty_bib_article = (
 # Regexes
 re_author = re.compile(r"\s+author[\s={\"]+([\w\-\s\.,]+?)(\s+and\s+|\s*[\"}]).*")
 re_year = re.compile(r"\s*year[\s={\"]+([0-9]+).*")
-re_key = re.compile(r"\s*@[a-zA-Z]+{(.*?),.*")
+re_citation_key = re.compile(r"\s*@[a-zA-Z]+{(.*?),.*")
 re_doi = re.compile(r"[0-9a-zA-Z-]+\.[0-9a-zA-Z-]+/[-;:\.<>()0-9a-zA-Z]+$")
-re_arxiv = re.compile(r"[0-9]{2}(0[1-9]|11|12)\.[0-9]{5}$")
+re_arxiv = re.compile(r"[0-9]{2}(0[1-9]|11|12)\.[0-9]{5}(v[1-9]{1}|)$")
 
 # Functions
 def doi2bib(doi):
@@ -129,6 +131,30 @@ def is_arxiv(id):
 	return True if re_arxiv.match(id) is not None else False
 #
 
+def pdf2key(filepath):
+	""" open file, find doi or arXiv id, return empty string if not found
+		Searches the first two pages only.
+	"""
+	text = extract_text(filepath, page_numbers=(0,1))
+
+	# Check for DOI
+	for line in text.split('\n'):
+		if len(line) > 0 and line[-1] == '.': line = line[:-1]
+		key = re_doi.search(line)
+		if key is not None: return key.group(0)
+	#
+
+	# Check for arXiv ID
+	text = "".join(line for line in text[::-1].split('\n') if len(line) == 1)
+	for section in text.split():
+		key = re_arxiv.search(section)
+		if key is not None: return key.group(0)
+	#
+
+	# Return empty string
+	return ""
+#
+
 def parse(bib):
 	""" bib string -> citation key (index returned if the is no key), author, year """ 
 	author = None
@@ -158,7 +184,7 @@ def parse(bib):
 			continue
 		#
 		if citation_key is None:
-			k = re_key.match(bib)
+			k = re_citation_key.match(bib)
 			if k is not None:
 				start = k.start(1)
 				end = k.end(1)

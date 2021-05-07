@@ -6,7 +6,7 @@ with open("README.md", "r") as f:
 
 setuptools.setup(
 	name="celsus",
-	version="1.0",
+	version="1.1",
 	description="Scientific reference manager for those with puristic taste.",
 	long_description=long_description,
 	author="Felix Horger",
@@ -18,9 +18,9 @@ setuptools.setup(
 		"Operating System :: POSIX :: Linux"
 	],
 	packages=["celsus"],
-	py_modules=["celsus.load", "celsus.latex", "celsus.bibtex"],
+	py_modules=["celsus.utils", "celsus.latex", "celsus.bibtex"],
 	scripts=["scripts/celsus"],
-	install_requires=["requests", "pylatexenc", "pdftotext"],
+	install_requires=["requests", "pylatexenc", "pdfminer.six"],
 	python_requires=">=3.6"
 )
 
