@@ -9,7 +9,8 @@ The name is derived from the ancient roman library of Celsus.
 Aim
 ---
 Stores documents and bibtex information of scientific references (papers, books, etc.) in a database.
-Users can add documents alongside unique keys which can be DOIs, arXiv IDs or manually defined expressions.
+Users can add documents alongside unique keys which can be DOIs, arXiv IDs or user defined expressions.
+Automatic detection of DOI or arXiv ID from a pdf file is implemented, working in most of the cases.
 Bibtex information is automatically loaded from doi.org, arxiv.org or can be added manually.
 Files are sorted in a user-defined directory and renamed consistently.
 
@@ -28,9 +29,4 @@ Usage
 -----
 
 Run `celsus` or `celsus --help`
-
-
-To Do
------
-- Enable entry deletion and modification.
 
