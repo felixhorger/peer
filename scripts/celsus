@@ -31,13 +31,7 @@ parser_add = subparsers.add_parser(
 	help="Add a document with corresponding unique key to the repository."
 )
 parser_add.add_argument(
-	"-edit",
-	action="store_true",
-	help="Edit the bibtex before it is parsed, useful if there is an error."
-	"Obsolete if no DOI or arXiv ID is used."
-)
-parser_add.add_argument(
-	"-from",
+	"--from",
 	type=str,
 	help=(
 		"Directory from which to add *.pdf files recursively."
@@ -72,42 +66,63 @@ parser_list.add_argument(
 	help="List of keywords which must all be present "
 	"in a matching bibtex entry (case sensitive)."
 )
-parser_list.add_argument("-key", action="store_true", help="Print the key.")
+parser_list.add_argument("--key", action="store_true", help="Print the key.")
 parser_list.add_argument(
-	"-file",
+	"--file",
 	action="store_true",
 	help="Print the path to the reference's file."
 )
-parser_list.add_argument("-nobib", action="store_true", help="Don't print the bibtex entry.")
+parser_list.add_argument("--nobib", action="store_true", help="Don't print the bibtex entry.")
 parser_list.add_argument(
-	"-open",
+	"--open",
 	action="store_true",
 	help="Open the documents."
 )
 parser_list.add_argument(
-	"-deep",
+	"--deep",
 	action="store_true",
 	help="Search the contents of the references as well."
 	" It will enter interactive mode because loading all contents is slow."
 	" The intended use is to review found documents and add them to a list, if matching."
 	" This list can then be saved to file and the listed documents can be opened using "
-	" `celsus list -open -found=FILENAME KEYWORDS`."
+	" `celsus list --open --found=FILENAME KEYWORDS`."
 )
 parser_list.add_argument(
-	"-found",
+	"--found",
 	type=str,
 	help="Only consider the references listed in this file"
 	" (newline separated keys, e.g. DOIs or arXiv IDs)."
 )
+# 
+# remove
+parser_remove = subparsers.add_parser("remove")
+parser_remove.add_argument(
+	"keys",
+	metavar="KEYS",
+	nargs='+',
+	type=str,
+	help="Celsus keys of the entries that are to be deleted."
+)
+parser_remove.add_argument(
+	"--noopen",
+	action="store_true",
+	help="Do not open the viewer."
+)
+parser_remove.add_argument(
+	"--move",
+	action="store_true",
+	help="Move files into current working directory instead of removing them. "
+	"This will overwrite files with the same name in the working directory."
+)
 # config
 parser_config = subparsers.add_parser("config")
 parser_config.add_argument(
-	"-editor",
+	"--editor",
 	type=str,
 	help="Command to open the preferred editor, e.g. vi or nano."
 )
 parser_config.add_argument(
-	"-viewer",
+	"--viewer",
 	type=str,
 	help="Command for opening documents (mostly pdf), e.g. evince."
 )
@@ -177,6 +192,7 @@ elif args.command == "add":
 		#
 	#
 	else:
+		# Generate list of pdf files
 		if not os.path.exists(args.from_dir): raise Exception("Directory does not exist.")
 		files_and_keys = []
 		for root, dirs, files in os.walk(args.from_dir):
@@ -217,10 +233,10 @@ elif args.command == "add":
 
 		# Defaults
 		bib = ""
-		edit_flag = args.edit
 		manual = False
 		download = False
 		check_key = False
+		edit_flag = False
 		viewer_proc = None
 
 		# Check if key is given, find out if not
@@ -263,9 +279,9 @@ elif args.command == "add":
 			if len(bib) > 0: break
 			ui = input(
 				"Could not retrieve bibtex for key {}, file {}"
-				", retry? (Continue=c, New key=e, Retry) ".format(key, filepath)
+				", retry? (Skip=s, New key=e, Retry) ".format(key, filepath)
 			)
-			if ui == 'c':
+			if ui == 's':
 				print(key, file=sys.stderr)
 				break
 			#
@@ -283,23 +299,22 @@ elif args.command == "add":
 				if len(key) == 0: break
 			#
 		#
-		if len(key) == 0: continue # If manual = False, then key cannot be of length zero
+		if len(key) == 0: continue # If manual = False, then key cannot
+		# be of length zero by definition
 
-		# Check if key was correct by displaying the bib if loaded
-		if check_key:
-			if not is_alive(viewer_proc): viewer_proc = open_viewer(filepath, config)
-			ui = input(
-				"Found this bibtex:\n\n{}\n\nDoes it match the reference? "
-				"(No=n, Edit=e, Yes)".format(bib)
-			)
-			if ui == "n":
-				print("Could not find a matching key.")
-				print(key, file=sys.stderr)
-				continue
-			#
-			elif ui == 'e':
-				edit_flag = True
-			#
+		# Check if bibtex is correct
+		if not is_alive(viewer_proc): viewer_proc = open_viewer(filepath, config)
+		ui = input(
+			"Found this bibtex:\n\n{}\n\nDoes it match the reference? "
+			"(Skip=s, Edit=e, Yes)".format(bib)
+		)
+		if ui == "s":
+			print("Could not find a matching bibtex.")
+			print(key, file=sys.stderr)
+			continue
+		#
+		elif ui == 'e':
+			edit_flag = True
 		#
 
 		# Check if manual adjustment is required
@@ -342,6 +357,7 @@ elif args.command == "add":
 						unknown_char_warning=False
 					)
 				#
+				# Open file and editor
 				tmppath = os.path.join(path, "tmpfile")
 				with open(tmppath, "w") as f:
 					f.write(bib)
@@ -352,11 +368,15 @@ elif args.command == "add":
 					bib = ""
 					break
 				#
+				# Get file contents and remove
 				with open(tmppath, "r") as f:
 					bib = f.read().strip()
 				#
 				os.remove(tmppath)
+				edit_flag = False
+				continue
 			#
+
 			# Parse and check if anything wasn't found or if author contains any non-ascii chars
 			old_citation_key, author, year = parse(bib)
 			if (
@@ -394,7 +414,7 @@ elif args.command == "add":
 			#
 		#
 
-		# Generate a filename form the citation key
+		# Generate a filename from the citation key
 		target_dir = os.path.join(path, year)
 		found = False
 		extension = os.path.splitext(filepath)[1]
@@ -415,11 +435,10 @@ elif args.command == "add":
 			bib = bib[:old_citation_key] + citation_key + bib[old_citation_key:]
 		#
 
+		# Generate target path
+		if not os.path.exists(target_dir): os.makedirs(target_dir)
 		# Move file
 		try:
-			# Generate target path
-			if not os.path.exists(target_dir): os.makedirs(target_dir)
-			# Move file
 			shutil.move(filepath, target_filename)
 		#
 		except:
@@ -432,10 +451,11 @@ elif args.command == "add":
 		write_celsus_file(target_filename, key, bib)
 
 		# Add to repo
-		target_filename = target_filename[len(path)]
-		if target_filename[0] == '/': target_filename = target_filename[1:]
-		repository[key] = (target_filename, "", "")
+		repository[key] = None # No entry needed, only key
 		print("Added {}.".format(key))
+
+		# Close viewer if still open
+		if is_alive(viewer_proc): viewer_proc.terminate() 
 	#
 #
 elif args.command == "list":
@@ -480,7 +500,7 @@ elif args.command == "list":
 		if not args.open: exit(0)
 		# Open files
 		number_of_files = len(to_open)
-		if number_of_files > 10:
+		if number_of_files > 5:
 			if input("Open {} files? (Yes=y, No) ".format(number_of_files)) == "":
 				exit(0)
 			#
@@ -505,7 +525,7 @@ elif args.command == "list":
 
 		# Open files
 		number_of_files = len(found)
-		if number_of_files > 10:
+		if number_of_files > 5:
 			if input("Open {} files one after another? (Yes=y, No) ".format(number_of_files)) == "":
 				exit(0)
 			#
@@ -527,6 +547,38 @@ elif args.command == "list":
 		else:
 			print(collected)
 		#
+	#
+#
+elif args.command == "remove":
+	keys = args.keys
+	args_open = not args.noopen
+
+	# Load the repo
+	repository, root_path = get_active_repository(config, load=keys)
+
+	# Function to (re)move file
+	wd = os.getcwd()
+	remove_entry = (
+		lambda path: shutil.move(path, os.path.join(wd, os.path.split(path)[1]))
+		if args.move else
+		lambda path: os.remove(path)
+	)
+	
+	# Iterate given keys
+	for key in keys:
+		# Check if key there, get path
+		if key not in repository:
+			print("Key {} not in repository.".format(key), file=sys.stderr)
+		#
+		path, bib, _ = repository[key]
+		path = os.path.join(root_path, path)
+		# Ask for user input
+		if args_open: open_viewer(path, config)
+		ui = input("Remove this entry?\n\n{}\n\n(Yes=y, No)".format(bib))
+		if ui != 'y': continue
+		# Remove if necessary
+		remove_entry(path)
+		os.remove(path + ".celsus")
 	#
 #
 elif args.command == "config":
