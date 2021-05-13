@@ -274,12 +274,13 @@ elif args.command == 'add':
 				get_bib = None
 				download = False
 				manual = True
-				break
+				ui = input('Key is no DOI or arXiv ID, enter another key? (No=n, Yes) ')
+				if ui == 'n': break
 			#
 
 			# Get bib corresponding to key
 			ui = ''
-			while True:
+			while not manual:
 				bib, url = get_bib(key)
 				if len(bib) > 0: break
 				ui = input(
@@ -311,7 +312,7 @@ elif args.command == 'add':
 				elif ui != 'k': break
 			#
 			# Ask for new key
-			if ui == 'k': # This must be an extra if, also sneaky
+			if ui == 'k' or manual: # This must be an extra if, also sneaky
 				key = input('Please enter new key (Skip): ').strip().lower()
 				if len(key) == 0: skip = True
 			#
