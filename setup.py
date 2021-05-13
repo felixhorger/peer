@@ -20,7 +20,7 @@ setuptools.setup(
 	packages=["celsus"],
 	py_modules=["celsus.utils", "celsus.latex", "celsus.bibtex"],
 	scripts=["scripts/celsus"],
-	install_requires=["requests", "pylatexenc", "pdfminer.six"],
+	install_requires=["requests", "pylatexenc", "pdftotext"],
 	python_requires=">=3.6"
 )
 
