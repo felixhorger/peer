@@ -252,7 +252,8 @@ elif args.command == 'add':
 
 		# Check if already present
 		if not check_key and key in repository:
-			print('Reference already loaded.')
+			ui = input('Reference already loaded, delete file? (Yes=y, No) ')
+			if ui == 'y': os.remove(filepath)
 			continue
 		#
 
@@ -329,7 +330,8 @@ elif args.command == 'add':
 
 		# Check if already present
 		if check_key and key in repository:
-			print('Reference already loaded.')
+			ui = input('Reference already loaded, delete file? (Yes=y, No) ')
+			if ui == 'y': os.remove(filepath)
 			continue
 		#
 
