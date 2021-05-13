@@ -5,7 +5,7 @@
 	Bibtex entries can be retrieved from:
 		- doi.org
 		- arxiv.org
-	
+
 	Parsing:
 		- Get the citation key, author and year
 		  of the publication (LaTex expressions NOT supported).
@@ -58,7 +58,7 @@ re_author = re.compile(r'\s+author[\s={\']+([\w\-\s\.,]+?)(\s+and\s+|\s*[\'}]).*
 re_year = re.compile(r'\s*year[\s={\']+([0-9]+).*')
 re_citation_key = re.compile(r'\s*@[a-zA-Z]+{(.*?),.*')
 re_doi = re.compile(r'[0-9a-zA-Z-]+\.[0-9a-zA-Z-]+/[-;:\.<>()0-9a-zA-Z]+$')
-re_arxiv = re.compile(r'[0-9]{2}(0[1-9]|11|12)\.[0-9]{5}(v[1-9]{1}|)$')
+re_arxiv = re.compile(r'[0-9]{2}(0[1-9]|1[0-2])\.[0-9]{5}(v[1-9]{1}|)$')
 re_doi_in_text = re.compile(
 	'(^|\s+)('
 	'|doi:|DOI:'
@@ -67,7 +67,7 @@ re_doi_in_text = re.compile(
 	'|http://dx\.doi\.org/'
 	'|https://dx\.doi\.org/'
 	')('
-	+ re_doi.pattern[:-1] + 
+	+ re_doi.pattern[:-1] +
 	')($|\s+)'
 )
 re_arxiv_in_text = re.compile('(^|\s+)arXiv:(' + re_arxiv.pattern[:-1] + ')($|\s+)')
@@ -75,7 +75,7 @@ re_arxiv_in_text = re.compile('(^|\s+)arXiv:(' + re_arxiv.pattern[:-1] + ')($|\s
 # Functions
 def doi2bib(doi):
 	''' string DOI -> bibtex entry string
-		
+
 		Loads the bibtex entry from doi.org.
 		Returns empty string if failing to do so.
 	'''
@@ -91,7 +91,7 @@ def doi2bib(doi):
 
 def arxiv2bib(arxiv_id):
 	''' string arxiv_id -> bibtex entry string, pdf url
-	
+
 		Loads the bibtex entry from arxiv.org.
 		Returns an empty string if failing to do so.
 		The prefix 'arXiv:' is to be omitted in the ID.
