@@ -30,3 +30,10 @@ Usage
 
 Run `celsus` or `celsus --help`
 
+
+Todo
+----
+
+- Add other ID systems, like HAL (provides bibtex) or PMC (doesn't).
+- Improve searching system regarding logical operators.
+
