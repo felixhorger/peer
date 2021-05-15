@@ -57,20 +57,15 @@ empty_bib_article = (
 re_author = re.compile(r'\s+author[\s={\']+([\w\-\s\.,]+?)(\s+and\s+|\s*[\'}]).*')
 re_year = re.compile(r'\s*year[\s={\']+([0-9]+).*')
 re_citation_key = re.compile(r'\s*@[a-zA-Z]+{(.*?),.*')
-re_doi = re.compile(r'[0-9a-zA-Z-]+\.[0-9a-zA-Z-]+/[-_;:\.<>/()0-9a-zA-Z]+$')
+re_doi = re.compile(r'10\.[0-9\.]+/[-_;:\.<>/()0-9a-zA-Z]+$')
 re_arxiv = re.compile(r'[0-9]{2}(0[1-9]|1[0-2])\.[0-9]{5}(v[1-9]{1}|)$')
 re_doi_in_text = re.compile(
-	'(^|\s+)('
-	'|doi:|DOI:'
-	'|http://doi\.org/'
-	'|https://doi\.org/'
-	'|http://dx\.doi\.org/'
-	'|https://dx\.doi\.org/'
-	')('
+	r'(^|.*\s)'
+	r'(doi:{0,1}\s*|DOI:{0,1}\s*|[htps\.dx/w]{10,}doi\.org/)('
 	+ re_doi.pattern[:-1] +
-	')($|\s+)'
+	r')($|\s+)'
 )
-re_arxiv_in_text = re.compile('(^|\s+)arXiv:(' + re_arxiv.pattern[:-1] + ')($|\s+)')
+re_arxiv_in_text = re.compile('(^|.*\s)arXiv:(' + re_arxiv.pattern[:-1] + ')($|\s+)')
 
 # Functions
 def doi2bib(doi):
@@ -165,6 +160,7 @@ def find_key(text):
 	# Check for key
 	for line in text.split('\n'):
 		line = line.strip()
+		print(line)
 		if len(line) > 0 and line[-1] == '.': line = line[:-1]
 		key = re_doi_in_text.search(line)
 		if key is not None: return key.group(3).strip()
