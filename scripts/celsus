@@ -217,7 +217,7 @@ elif args.command == 'add':
 		print('\nProcessing {}'.format(filepath))
 
 		# Close viewer from last iteration if still open
-		if is_alive(viewer_proc): viewer_proc.terminate() 
+		if is_alive(viewer_proc): viewer_proc.terminate()
 
 		# Defaults
 		bib = ''
@@ -295,7 +295,9 @@ elif args.command == 'add':
 			#
 
 			# Check if bibtex matches the reference
-			if not skip and not is_alive(viewer_proc): viewer_proc = open_viewer(filepath, config)
+			if not skip and file_exists and not is_alive(viewer_proc):
+				viewer_proc = open_viewer(filepath, config)
+			#
 			if ui != 'k': # Sneaky
 				ui = input(
 					'Found this bibtex:\n\n{}\n\nDoes it match the reference? '
@@ -313,6 +315,7 @@ elif args.command == 'add':
 			#
 			# Ask for new key
 			if ui == 'k' or manual: # This must be an extra if, also sneaky
+				bib = ''
 				key = input('Please enter new key (Skip): ').strip().lower()
 				if len(key) == 0: skip = True
 			#
@@ -369,13 +372,17 @@ elif args.command == 'add':
 						break
 					#
 					elif ui == 'e':
-						if not is_alive(viewer_proc): viewer_proc = open_viewer(filepath, config)
+						if file_exists and not is_alive(viewer_proc):
+							viewer_proc = open_viewer(filepath, config)
+						#
 						if manual: bib = empty_bib_article
 					#
 					elif not manual: break
 				#
 				else:
-					if not is_alive(viewer_proc): viewer_proc = open_viewer(filepath, config)
+					if file_exists and not is_alive(viewer_proc):
+						viewer_proc = open_viewer(filepath, config)
+					#
 				#
 
 				# Open file and editor
@@ -472,6 +479,7 @@ elif args.command == 'add':
 		repository[key] = None # No entry needed, only key
 		print('Added {}.'.format(key))
 	#
+	if is_alive(viewer_proc): viewer_proc.terminate()
 #
 elif args.command == 'list':
 	# Load keys to search among from file
