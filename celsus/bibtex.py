@@ -21,7 +21,7 @@
 		  delimited by whitespaces or in URL.
 
 	For convenience, an empty bib entry (article) is provided.
-	Also, the generator 'gen_letters' is useful to produce unique citation keys. 
+	Also, the generator 'gen_letters' is useful to produce unique citation keys.
 
 '''
 
@@ -31,7 +31,6 @@ import bs4
 import string
 import requests
 import datetime
-import pdftotext
 from math import log
 import celsus
 from celsus.latex import to_ascii
@@ -58,14 +57,7 @@ re_author = re.compile(r'\s+author[\s={\']+([\w\-\s\.,]+?)(\s+and\s+|\s*[\'}]).*
 re_year = re.compile(r'\s*year[\s={\']+([0-9]+).*')
 re_citation_key = re.compile(r'\s*@[a-zA-Z]+{(.*?),.*')
 re_doi = re.compile(r'10\.[0-9\.]+/[-_;:\.<>/()0-9a-zA-Z]+$')
-re_arxiv = re.compile(r'[0-9]{2}(0[1-9]|1[0-2])\.[0-9]{5}(v[1-9]{1}|)$')
-re_doi_in_text = re.compile(
-	r'(^|.*\s)'
-	r'(doi:{0,1}\s*|DOI:{0,1}\s*|[htps\.dx/w]{10,}doi\.org/)('
-	+ re_doi.pattern[:-1] +
-	r')($|\s+)'
-)
-re_arxiv_in_text = re.compile('(^|.*\s)arXiv:(' + re_arxiv.pattern[:-1] + ')($|\s+)')
+re_arxiv = re.compile(r'[0-9]{2}(0[1-9]|1[0-2])\.[0-9]{4,5}(v[1-9]{1}|)$')
 
 # Functions
 def doi2bib(doi):
@@ -75,7 +67,7 @@ def doi2bib(doi):
 		Returns empty string if failing to do so.
 	'''
 	website = requests.get(
-		'http://dx.doi.org/' + doi,
+		'https://dx.doi.org/' + doi,
 		headers={'accept': 'application/x-bibtex'}
 	)
 	if not website.ok:
@@ -139,36 +131,6 @@ def is_doi(doi):
 
 def is_arxiv(id):
 	return True if re_arxiv.match(id) is not None else False
-#
-
-def get_text(filepath):
-	''' Read file, if pdf then parse with pdftotext '''
-	if os.path.splitext(filepath)[1] == '.pdf':
-		with open(filepath, 'rb') as f:
-			return '\n'.join(pdftotext.PDF(f))
-		#
-	#
-	else:
-		with open(filepath, 'r') as f:
-			return f.read()
-		#
-	#
-#
-
-def find_key(text):
-	''' Find doi or arXiv id in text, return empty string if not found. '''
-	# Check for key
-	for line in text.split('\n'):
-		line = line.strip()
-		print(line)
-		if len(line) > 0 and line[-1] == '.': line = line[:-1]
-		key = re_doi_in_text.search(line)
-		if key is not None: return key.group(3).strip()
-		key = re_arxiv_in_text.search(line)
-		if key is not None: return key.group(2).strip()
-	#
-	# Return empty string
-	return ''
 #
 
 def parse(bib):

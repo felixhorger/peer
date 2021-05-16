@@ -5,17 +5,28 @@
 '''
 
 import os
+import re
 import json
 import zlib
 import subprocess
+import pdftotext
 import celsus
-from celsus.bibtex import get_text
+from celsus.bibtex import re_doi, re_arxiv
+
 # Constants
 CONFIG_FILE = os.path.expanduser('~/.celsusconfig')
 ONLY_KEY = 0
 BIB = 1
 BIB_AND_CONTENT = 2
 
+# Regexes
+re_doi_in_text = re.compile(
+	r'(^|.*\s)'
+	r'(Digital Object Identifier\s*|doi:{0,1}\s*|DOI:{0,1}\s*|[htps:\.dx/w]*doi\.org/)('
+	+ re_doi.pattern[:-1] +
+	r')($|\s+.*)'
+)
+re_arxiv_in_text = re.compile('(^|.*\s)arXiv:(' + re_arxiv.pattern[:-1] + ')($|\s+.*)')
 
 # Functions
 def get_config():
@@ -51,17 +62,17 @@ def write_config(config):
 
 def get_active_repository(config, load=ONLY_KEY):
 	''' Load the active repository.
-	
+
 	Arguments:
 		> config: dictionary containing the celsus config.
 		> load=ONLY_KEY: what to load, one of ONLY_KEY, BIB, BIB_AND_CONTENT
 		  or a list/tuple of keys for loading the bibtex only.
-	
+
 	Returns:
 		> repository: dictionary storing the keys, bibtexs and contents
 		  of the references/documents.
 		> path: to the folder containing the repository.
-	'''	
+	'''
 	path = config.get('active')
 	if path is None:
 		raise Exception('No active repository.')
@@ -168,5 +179,28 @@ def open_editor(path, config):
 		Returns the completed process object.
 	'''
 	return subprocess.run((config['editor'], path))
+#
+
+def get_text(filepath):
+	''' Read file, parse with pdftotext '''
+	with open(filepath, 'rb') as f:
+		return '\n'.join(pdftotext.PDF(f))
+	#
+#
+
+def find_key(text):
+	''' Find doi or arXiv id in text, return empty string if not found. '''
+	# Check for key
+	for line in text.split('\n'):
+		line = line.strip()
+		print(line)
+		if len(line) > 0 and line[-1] == '.': line = line[:-1]
+		key = re_doi_in_text.search(line)
+		if key is not None: return key.group(3).strip()
+		key = re_arxiv_in_text.search(line)
+		if key is not None: return key.group(2).strip()
+	#
+	# Return empty string
+	return ''
 #
 
