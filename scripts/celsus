@@ -383,7 +383,7 @@ elif args.command == 'add':
 						#
 						if manual: bib = empty_bib_article
 					#
-					elif not manual: break
+					elif not manual: continue
 				#
 				else:
 					if file_exists and not is_alive(viewer_proc):
@@ -398,9 +398,7 @@ elif args.command == 'add':
 				#
 				proc = open_editor(tmppath, config)
 				if proc.returncode != 0:
-					print('Editor could not be opened successfully.', file=stderr)
-					bib = ''
-					break
+					raise Exception('Editor could not be opened successfully.', file=stderr)
 				#
 				# Get file contents and remove
 				with open(tmppath, 'r') as f:
