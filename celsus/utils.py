@@ -22,9 +22,9 @@ BIB_AND_CONTENT = 2
 # Regexes
 re_doi_in_text = re.compile(
 	r'(^|.*\s)'
-	r'(Digital Object Identifier\s*|doi:{0,1}\s*|DOI:{0,1}\s*|[htps:\.dx/w]*doi\.org/)('
+	r'(Digital Object Identifier\s*|Digital Object Identiﬁer\s*|doi:{0,1}\s*|DOI:{0,1}\s*|[htps:\.dx/w]*doi\.org/)('
 	+ re_doi.pattern[:-1] +
-	r')($|\s+.*)'
+	r'?)(|\.)($|\s+.*)'
 )
 re_arxiv_in_text = re.compile('(^|.*\s)arXiv:(' + re_arxiv.pattern[:-1] + ')($|\s+.*)')
 
