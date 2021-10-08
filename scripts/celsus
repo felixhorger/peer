@@ -28,7 +28,7 @@ parser_use.add_argument(
 # add
 parser_add = subparsers.add_parser(
 	'add',
-	help='Add a document with corresponding unique key to the repository.'
+	help='a pdf with corresponding unique key (DOI, arXiv ID, ...) to the repository.'
 )
 parser_add.add_argument(
 	'--from',
@@ -45,8 +45,8 @@ parser_add.add_argument(
 	nargs='*',
 	type=str,
 	help=(
-	'List file1 key1 file2 key2 ... '
-	'If file is \'-\', it must be an arxiv paper which will be downloaded automatically. '
+	'List similar to [file1 key1 [file2 key2 ...]]. '
+	'If file is \'-\', it must be an arXiv paper which will be downloaded automatically. '
 	'If key is \'-\', celsus will try to get the key from the file. '
 	'Consequently, file must not be \'-\' in this case.'
 	)
@@ -54,7 +54,7 @@ parser_add.add_argument(
 # list
 parser_list = subparsers.add_parser(
 	'list',
-	help='List matching references, see flags.'
+	help='matching references, see flags.'
 )
 parser_list.add_argument(
 	'keywords',
@@ -68,32 +68,49 @@ parser_list.add_argument('--key', action='store_true', help='Print the key.')
 parser_list.add_argument(
 	'--file',
 	action='store_true',
-	help='Print the path to the reference\'s file.'
+	help='Print the path to the reference\'s pdf file.'
 )
 parser_list.add_argument('--nobib', action='store_true', help='Don\'t print the bibtex entry.')
 parser_list.add_argument(
 	'--open',
 	action='store_true',
-	help='Open the documents.'
+	help='Open the pdfs.'
 )
 parser_list.add_argument(
 	'--deep',
 	action='store_true',
-	help='Search the contents of the references as well. '
-	'It will enter interactive mode because loading all contents is slow. '
-	'The intended use is to review found documents and add them to a list, if matching. '
-	'This list can then be saved to file and the listed documents can be opened using '
-	'`celsus list --open --found=FILENAME KEYWORDS`.'
+	help='Additionally search the text contents of the pdfs. '
+	'It will enter interactive mode. '
+	'The intended use is to review matching references and add them to a list. '
+	'This list can then be written to file or stdout.'
+	'From any such file, the corresponding pdfs can be opened using '
+	'`celsus list --open --include=FILENAME KEYWORDS`.'
 )
 parser_list.add_argument(
-	'--found',
+	'--include',
 	type=str,
-	help='Only consider the references listed in this file '
+	metavar='FILENAME',
+	help='Only consider references listed in this file '
 	'(newline separated keys, e.g. DOIs or arXiv IDs).'
 )
+parser_list.add_argument(
+	'--exclude',
+	type=str,
+	metavar='FILENAME',
+	help='Analogue to --include, but listed references are not considered '
+	'even if present in --include.'
+)
+
 # 
 # remove
-parser_remove = subparsers.add_parser('remove')
+parser_remove = subparsers.add_parser(
+	'remove',
+	help='references from the repository.',
+	description='Can be used to conveniently delete a limited number of references, '
+	'e.g. due to duplication or because a newer version is available. '
+	'For mass-deletion or moving to another celsus repository, use alike'
+	'`celsus list --nobib --file | xargs -n1 -I{} sh -c \'rm {} && rm {}.celsus\'`.'
+)
 parser_remove.add_argument(
 	'keys',
 	metavar='KEYS',
@@ -104,7 +121,7 @@ parser_remove.add_argument(
 parser_remove.add_argument(
 	'--noopen',
 	action='store_true',
-	help='Do not open the viewer.'
+	help='Do not open the viewer to inspect pdfs which are to be deleted.'
 )
 parser_remove.add_argument(
 	'--move',
@@ -122,7 +139,7 @@ parser_config.add_argument(
 parser_config.add_argument(
 	'--viewer',
 	type=str,
-	help='Command for opening documents, e.g. evince.'
+	help='Command for opening pdfs, e.g. evince.'
 )
 # Parse
 args = parser.parse_args()
@@ -171,6 +188,9 @@ from celsus.bibtex import (
 from celsus.latex import is_non_ascii, unicode_to_latex
 
 
+# Helper functions
+is_alive = lambda process: process is not None and process.poll() is None
+
 # Execute commands
 config = get_config()
 if args.command == 'use':
@@ -206,9 +226,6 @@ elif args.command == 'add':
 
 	# Get repo and paths
 	repository, path = get_active_repository(config, load=ONLY_KEY)
-
-	# Helper functions
-	is_alive = lambda process: process is not None and process.poll() is None
 
 	# Iterate arguments
 	viewer_proc = None
@@ -487,28 +504,44 @@ elif args.command == 'add':
 #
 elif args.command == 'list':
 	# Load keys to search among from file
-	if args.found is not None:
-		if not os.path.isfile(args.found):
-			raise Exception('File {} not found.'.format(args.found))
+	if args.include is not None:
+		if not os.path.isfile(args.include):
+			raise Exception('File {} not found.'.format(args.include))
 		#
-		with open(args.found, 'r') as f:
+		with open(args.include, 'r') as f:
 			keys_to_use = f.read().split('\n')
 		#
 		load = keys_to_use
 	#
 	else: load = BIB_AND_CONTENT if args.deep else BIB
 
+	# Get keys to exclude
+	if args.exclude is not None:
+		if not os.path.isfile(args.exclude):
+			raise Exception('File {} not found.'.format(args.exclude))
+		#
+		with open(args.exclude, 'r') as f:
+			keys_to_exclude = f.read().split('\n')
+		#
+	#
+	else: keys_to_exclude = []
+
 	if not args.deep:
 		# Get repo
-		repository, root_path = get_active_repository(config, load)
+		repository, root_path = get_active_repository(config, load, keys_to_exclude)
 
-		# Set up format string
+		# Set up format string for printing info
 		fmt_str = []
-		if args.file: fmt_str.append('{file}')
-		if args.key: fmt_str.append('{key}')
-		if not args.nobib: fmt_str.append('{bib}')
-		fmt_str = '\n'.join(fmt_str)
-		# Set up mechanism to open files if required
+		if args.key: fmt_str.append('{key}\n')
+		if args.file: fmt_str.append('{file}\n')
+		if not args.nobib:
+			fmt_str.append('{bib}')
+		#
+		else:
+			fmt_str[-1] = fmt_str[-1][:-1] # Cut off last newline (included in print() anyway)
+		#
+		fmt_str = ''.join(fmt_str)
+		# Set up mechanism to remember which files to open if wanted
 		to_open = []
 		remember_file = (
 			(lambda file: to_open.append(file))
@@ -520,7 +553,7 @@ elif args.command == 'list':
 		for (key, (file, bib, _)) in repository.items():
 			if all((k in bib or k == key) for k in keywords):
 				file = os.path.join(root_path, file)
-				print(fmt_str.format(key=key, file=file, bib=bib), '\n')
+				print(fmt_str.format(key=key, file=file, bib=bib))
 				remember_file(file)
 			#
 		#
@@ -530,7 +563,7 @@ elif args.command == 'list':
 		if number_of_files > 5:
 			if input(
 				'Open {} files? (Yes=y, No) '.format(number_of_files)
-			).strip().lower() == '':
+			).strip().lower() != 'y':
 				exit(0)
 			#
 		#
@@ -556,29 +589,31 @@ elif args.command == 'list':
 		if number_of_files > 5:
 			if input(
 				'Open {} files one after another? (Yes=y, No) '.format(number_of_files)
-			).strip().lower() == '':
+			).strip().lower() != 'y':
 				exit(0)
 			#
 		#
 		collected = []
 		for key in found:
-			open_viewer(os.path.join(root_path, repository[key][0]), config)
-			if input('Add reference to list? (No=n, Yes) ').strip().lower() != 'n':
+			viewer_proc = open_viewer(os.path.join(root_path, repository[key][0]), config)
+			ui = input('Add reference to list? (Stop=s, Yes=y, No) ').strip().lower()
+			if ui == 's':
+				if is_alive(viewer_proc): viewer_proc.terminate()
+				break
+			#
+			elif ui == 'y':
 				collected.append(key)
 			#
+			if is_alive(viewer_proc): viewer_proc.terminate()
 		#
 		collected = '\n'.join(collected)
 
 		# Output
-		ui = input('Write keys to file? (Yes=FILENAME, No) ').strip().lower()
+		ui = input('Write keys to file? (Create/Append to file=FILENAME, Print to stdout) ').strip()
 		if len(ui):
-			with open(ui, 'w') as f:
-				f.write(collected)
-			#
+			with open(ui, 'a') as f: f.write(collected)
 		#
-		else:
-			print(collected)
-		#
+		else: print(collected)
 	#
 #
 elif args.command == 'remove':

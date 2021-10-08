@@ -9,7 +9,6 @@ import re
 import json
 import zlib
 import subprocess
-import pdftotext
 import celsus
 from celsus.bibtex import re_doi, re_arxiv
 
@@ -22,7 +21,8 @@ BIB_AND_CONTENT = 2
 # Regexes
 re_doi_in_text = re.compile(
 	r'(^|.*\s)'
-	r'(Digital Object Identifier\s*|Digital Object Identiﬁer\s*|doi:{0,1}\s*|DOI:{0,1}\s*|[htps:\.dx/w]*doi\.org/)('
+	r'(Digital Object Identifier\s*|Digital Object Identiﬁer\s*'
+	'|doi:{0,1}\s*|DOI:{0,1}\s*|[htps:\.dx/w]*doi\.org/)('
 	+ re_doi.pattern[:-1] +
 	r'?)(|\.)($|\s+.*)'
 )
@@ -60,13 +60,14 @@ def write_config(config):
 	return
 #
 
-def get_active_repository(config, load=ONLY_KEY):
+def get_active_repository(config, load=ONLY_KEY, exclude=[]):
 	''' Load the active repository.
 
 	Arguments:
 		> config: dictionary containing the celsus config.
 		> load=ONLY_KEY: what to load, one of ONLY_KEY, BIB, BIB_AND_CONTENT
 		  or a list/tuple of keys for loading the bibtex only.
+		> exclude=[]: keys listed here.
 
 	Returns:
 		> repository: dictionary storing the keys, bibtexs and contents
@@ -111,6 +112,19 @@ def get_active_repository(config, load=ONLY_KEY):
 		load_content = lambda f, start: ''
 	#
 
+
+	is_to_load = (
+		(lambda key: key in keys_to_load)
+		if keys_to_load is not None
+		else (lambda key: True)
+	)
+	is_excluded = (
+		(lambda key: key in exclude)
+		if len(exclude)
+		else (lambda key: False)
+	)
+
+
 	# Load
 	repository = {}
 	for year in os.listdir(path):
@@ -127,7 +141,7 @@ def get_active_repository(config, load=ONLY_KEY):
 			# Key and bib
 			with open(filename, 'rb', buffering=512) as f:
 				key = f.readline()[:-1].decode()
-				if keys_to_load is not None and key not in keys_to_load: continue
+				if (not is_to_load(key)) or is_excluded(key): continue
 				bib, chars = load_bib(f)
 			#
 			# Content
@@ -183,9 +197,9 @@ def open_editor(path, config):
 
 def get_text(filepath):
 	''' Read file, parse with pdftotext '''
-	with open(filepath, 'rb') as f:
-		return '\n'.join(pdftotext.PDF(f))
-	#
+	proc = subprocess.run(['pdftotext', filepath, '-'], stdout=subprocess.PIPE)
+	proc.check_returncode()
+	return proc.stdout.decode()
 #
 
 def find_key(text):
@@ -193,7 +207,6 @@ def find_key(text):
 	# Check for key
 	for line in text.split('\n'):
 		line = line.strip()
-		print(line)
 		if len(line) > 0 and line[-1] == '.': line = line[:-1]
 		key = re_doi_in_text.search(line)
 		if key is not None: return key.group(3).strip()
