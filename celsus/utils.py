@@ -209,9 +209,9 @@ def find_key(text):
 		line = line.strip()
 		if len(line) > 0 and line[-1] == '.': line = line[:-1]
 		key = re_doi_in_text.search(line)
-		if key is not None: return key.group(3).strip()
+		if key is not None: return key.group(3).strip().lower()
 		key = re_arxiv_in_text.search(line)
-		if key is not None: return key.group(2).strip()
+		if key is not None: return key.group(2).strip().lower()
 	#
 	# Return empty string
 	return ''

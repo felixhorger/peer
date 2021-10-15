@@ -511,7 +511,7 @@ elif args.command == 'list':
 		with open(args.include, 'r') as f:
 			keys_to_use = f.read().split('\n')
 		#
-		load = keys_to_use
+		load = tuple(key.lower() for key in keys_to_use)
 	#
 	else: load = BIB_AND_CONTENT if args.deep else BIB
 
@@ -521,10 +521,14 @@ elif args.command == 'list':
 			raise Exception('File {} not found.'.format(args.exclude))
 		#
 		with open(args.exclude, 'r') as f:
-			keys_to_exclude = f.read().split('\n')
+			keys_to_exclude = tuple(key.lower() for key in f.read().split('\n'))
 		#
 	#
 	else: keys_to_exclude = []
+
+	# Get keywords in upper and lower case (for key)
+	keywords = args.keywords
+	keywords_lower = tuple(k.lower() for k in args.keywords)
 
 	if not args.deep:
 		# Get repo
@@ -549,9 +553,8 @@ elif args.command == 'list':
 			(lambda file: None)
 		)
 		# Search and print
-		keywords = args.keywords
 		for (key, (file, bib, _)) in repository.items():
-			if all((k in bib or k == key) for k in keywords):
+			if all((k in bib or kl == key) for (k, kl) in zip(keywords, keywords_lower)):
 				file = os.path.join(root_path, file)
 				print(fmt_str.format(key=key, file=file, bib=bib))
 				remember_file(file)
@@ -577,9 +580,9 @@ elif args.command == 'list':
 
 		# Search
 		found = []
-		keywords = args.keywords
+		search_string = bib + '\n' + content
 		for (key, (_, bib, content)) in repository.items():
-			if all(k in (bib + '\n' + content) for k in keywords):
+			if all((k in search_string or kl == key) for (k, kl) in zip(keywords, keywords_lower)):
 				found.append(key)
 			#
 		#
