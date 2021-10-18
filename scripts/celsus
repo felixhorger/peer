@@ -650,6 +650,8 @@ elif args.command == 'remove':
 		# Remove if necessary
 		remove_entry(path)
 		os.remove(path + '.celsus')
+		# Close viewer if still open
+		if is_alive(viewer_proc): viewer_proc.terminate()
 	#
 #
 elif args.command == 'config':
