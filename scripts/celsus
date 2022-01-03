@@ -580,8 +580,8 @@ elif args.command == 'list':
 
 		# Search
 		found = []
-		search_string = bib + '\n' + content
 		for (key, (_, bib, content)) in repository.items():
+			search_string = bib + '\n' + content
 			if all((k in search_string or kl == key) for (k, kl) in zip(keywords, keywords_lower)):
 				found.append(key)
 			#
@@ -612,6 +612,7 @@ elif args.command == 'list':
 		collected = '\n'.join(collected)
 
 		# Output
+		if len(collected) == 0: exit(0)
 		ui = input('Write keys to file? (Create/Append to file=FILENAME, Print to stdout) ').strip()
 		if len(ui):
 			with open(ui, 'a') as f: f.write(collected)
