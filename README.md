@@ -2,7 +2,7 @@
 Celsus - Scientific reference manager for those with puristic taste.
 ====================================================================
 
-The name is derived from the ancient roman library of Celsus.
+The name is derived from the ancient roman library of Celsus, very dramatic.
 
 **Work in progress, bug reports welcome**
 
@@ -17,10 +17,6 @@ Files are sorted in a user-defined directory and renamed consistently.
 Installation
 ------------
 
-`pip install -i https://test.pypi.org/simple/ celsus`
-
-or
-
 1. `git clone` this repository.
 2. `cd` to the root directory of the repository.
 3. `python3 setup.py install --user`
@@ -31,9 +27,9 @@ Usage
 Run `celsus` or `celsus --help`
 
 
-Todo
-----
+To do
+-----
 
-- Add other ID systems, like HAL (provides bibtex) or PMC (doesn't).
+- Add other ID systems, like HAL (provides bibtex) or PMC (doesn't last time I checked).
 - Improve searching system regarding logical operators.
 
