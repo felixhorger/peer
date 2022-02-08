@@ -52,6 +52,17 @@ empty_bib_article = (
 	'}'
 )
 
+empty_bib_article_ismrm = (
+	'@inproceedings{,'
+		'year = {},'
+		'pages = {},'
+		'author = {},'
+		'title = {},'
+		'booktitle = {Proceedings th Scientific Meeting, International Society for Magnetic Resonance in Medicine}'
+		'address = {},'
+	'}'
+)
+
 # Regexes
 re_author = re.compile(r'\s+author[\s={\']+([\w\-\s\.,]+?)(\s+and\s+|\s*[\'}]).*')
 re_year = re.compile(r'\s*year[\s={\']+([0-9]+).*')

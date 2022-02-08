@@ -108,7 +108,7 @@ parser_remove = subparsers.add_parser(
 	help='references from the repository.',
 	description='Can be used to conveniently delete a limited number of references, '
 	'e.g. due to duplication or because a newer version is available. '
-	'For mass-deletion or moving to another celsus repository, use alike'
+	'For mass-deletion or moving to another celsus repository, use alike '
 	'`celsus list --nobib --file | xargs -n1 -I{} sh -c \'rm {} && rm {}.celsus\'`.'
 )
 parser_remove.add_argument(
@@ -297,7 +297,13 @@ elif args.command == 'add':
 				download = False
 				manual = True
 				ui = input('Key is no DOI or arXiv ID, enter another key? (No=n, Yes) ')
+				if not is_alive(viewer_proc): viewer_proc = open_viewer(filepath, config)
 				if ui == 'n': break
+				if not file_exists:
+					print('File {} does not exist.'.format(filepath))
+					skip = True
+					break
+				#
 			#
 
 			# Get bib corresponding to key
@@ -307,10 +313,15 @@ elif args.command == 'add':
 				if len(bib) > 0: break
 				ui = input(
 					'Could not retrieve bibtex for key {}, file {}'
-					', retry? (Skip=s, New key=k, Retry) '.format(key, filepath)
+					', retry? (Skip=s, Manually=m, New key=k, Retry) '.format(key, filepath)
 				).strip().lower()
 				if ui == 's':
 					skip = True
+					break
+				#
+				if ui == 'm':
+					edit_flag = True
+					manual = True
 					break
 				#
 				elif ui == 'k': break
@@ -335,12 +346,17 @@ elif args.command == 'add':
 				#
 				elif ui != 'k': break
 			#
-			# Ask for new key
+
+			# Is key valid but user wants to enter it manually?
+			if manual and edit_flag: break
+
+			# Ask for new key otherwise
 			if ui == 'k' or manual: # This must be an extra if, also sneaky
 				bib = ''
 				key = input('Please enter new key (Skip): ').strip().lower()
 				if len(key) == 0: skip = True
 			#
+
 			# Break if required
 			if skip: break
 		#
@@ -368,7 +384,12 @@ elif args.command == 'add':
 			if len(bib) == 0 or has_non_ascii or manual or edit_flag:
 				# Change bib to something more reasonable
 				if len(bib) == 0:
-					bib = empty_bib_article
+					if key.lower().find("ismrm") >= 0:
+						bib = empty_bib_article_ismrm 
+					#
+					else:
+						bib = empty_bib_article
+					#
 				#
 				elif has_non_ascii:
 					bib = unicode_to_latex(
@@ -645,7 +666,8 @@ elif args.command == 'remove':
 		path, bib, _ = repository[key]
 		path = os.path.join(root_path, path)
 		# Ask for user input
-		if args_open: open_viewer(path, config)
+		if args_open: viewer_proc = open_viewer(path, config)
+		else: viewer_proc = None
 		ui = input('Remove this entry?\n\n{}\n\n(Yes=y, No) '.format(bib)).strip().lower()
 		if ui != 'y': continue
 		# Remove if necessary
