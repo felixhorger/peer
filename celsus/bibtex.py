@@ -77,10 +77,15 @@ def doi2bib(doi):
 		Loads the bibtex entry from doi.org.
 		Returns empty string if failing to do so.
 	'''
-	website = requests.get(
-		'https://dx.doi.org/' + doi,
-		headers={'accept': 'application/x-bibtex'}
-	)
+	try:
+		website = requests.get(
+			'https://dx.doi.org/' + doi,
+			headers={'accept': 'application/x-bibtex'}
+		)
+	#
+	except Exception as E:
+		raise Exception('Could not send request to retrieve bibtex, are you connected to the internet?') from E
+	#
 	if not website.ok:
 		return ''
 	#
