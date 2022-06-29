@@ -3,6 +3,10 @@
 
 	Celsus - Scientific reference manager for those with puristic taste.
 
+	TODO: Rework the whole code, put stuff in function so that bibtex can be revised if required.
+	Worst case do an automatic remove and readd, this might work.
+	add short versions of --open and similar.
+
 '''
 
 # Parse arguments
@@ -183,6 +187,7 @@ from celsus.bibtex import (
 	doi2bib, arxiv2bib,
 	is_doi, is_arxiv,
 	empty_bib_article,
+	empty_bib_article_ismrm,
 	gen_letters
 )
 from celsus.latex import is_non_ascii, unicode_to_latex
@@ -605,6 +610,7 @@ elif args.command == 'list':
 			search_string = bib + '\n' + content
 			if all((k in search_string or kl == key) for (k, kl) in zip(keywords, keywords_lower)):
 				found.append(key)
+				print(bib + '\n')
 			#
 		#
 
