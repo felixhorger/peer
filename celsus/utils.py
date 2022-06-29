@@ -155,14 +155,9 @@ def get_active_repository(config, load=ONLY_KEY, exclude=[]):
 	return repository, path
 #
 
-def write_celsus_file(path, key, bib, text=None):
+def write_celsus_file(path, key, bib, text):
 	''' Augments path with .celsus and writes the required information.
-		If text is not None, then the file is not reread.
 	'''
-	# Get reference as text
-	if text is None:
-		text = get_text(path)
-	#
 	text = text.encode()
 	# Write to celsus file
 	path = path + '.celsus'

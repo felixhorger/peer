@@ -170,6 +170,7 @@ if args.command is None or parser.description:
 # Imports
 import os
 import shutil
+import tempfile
 import requests
 import readline
 import celsus
@@ -195,6 +196,236 @@ from celsus.latex import is_non_ascii, unicode_to_latex
 
 # Helper functions
 is_alive = lambda process: process is not None and process.poll() is None
+clear_screen = lambda: print('\033[2J\033[H')
+
+def edit_bibtex_manually(bib):
+	if len(bib) == 0:
+		if key.lower().find("ismrm") >= 0: bib = empty_bib_article_ismrm 
+		else: bib = empty_bib_article
+	#
+	# Open file and editor
+	handle, tmppath = tempfile.mkstemp()
+	with open(handle, 'w') as f:
+		f.write(bib)
+	#
+	proc = open_editor(tmppath, config)
+	if proc.returncode != 0:
+		raise Exception('Editor could not be opened successfully.', file=stderr)
+	#
+	# Get file contents and remove
+	with open(tmppath, 'r') as f:
+		bib = f.read().strip()
+	#
+	os.remove(tmppath)
+	return bib
+#
+
+def finalise_citation(bib):
+	# Parse
+	old_citation_key, author, year = parse(bib)
+	# Everything found?
+	if any(v is None for v in (author, year, old_citation_key)): return False
+	# Add letter(s) if citation key is already occupied
+	target_dir = os.path.join(path, year)
+	found = False
+	extension = os.path.splitext(filepath)[1]
+	for letter in gen_letters():
+		citation_key = author + year + letter
+		target_filename = os.path.join(target_dir, citation_key + extension)
+		if not os.path.exists(target_filename):
+			found = True
+			break
+		#
+	#
+	# Modify bib to include citation key
+	if isinstance(old_citation_key, str):
+		bib = bib.replace(old_citation_key, citation_key, 1)
+	#
+	else: # In this case the key is integer, indicating where the key should be
+		bib = bib[:old_citation_key] + citation_key + bib[old_citation_key:]
+	#
+	return bib, target_dir, target_filename
+#
+
+def add_article_recur_A(key, filepath, file_exists, text, viewer_proc, repository, config):
+	"""
+		Gets the key and a function to get the bib
+		then calls stage 2
+	"""
+	# Check key
+	if key == '-':
+		key_is_valid = True
+		get_bib = None
+	#
+	elif is_doi(key):
+		key_is_valid = True
+		get_bib = lambda key: (doi2bib(key), '')
+	#
+	elif is_arxiv(key):
+		key_is_valid = True
+		get_bib = lambda key: arxiv2bib(key)
+	#
+	else:
+		key_is_valid = False
+		get_bib = None
+	#
+	if get_bib is None:
+		# Open viewer
+		if not is_alive(viewer_proc) and file_exists:
+			viewer_proc = open_viewer(filepath, config)
+		#
+		# Distinguish what went wrong
+		if key_is_valid:
+			if not file_exists:
+				print('File {} doesn\'t exist'.format(filepath))
+				return False
+			#
+			if not len(text): text = get_text(filepath)
+			key = find_key(text)
+			if len(key) == 0:
+				key = input(
+					'Could not identify key of {}, please find it manually (Key=..., Skip): '.format(filepath)
+				).strip()
+			#
+		#
+		else: key = input('Key is no DOI or arXiv ID, enter another key? (Key=..., Skip) ')
+		if not len(key): return False
+		return add_article_recur_A(key, filepath, file_exists, text, viewer_proc, repository, config)
+	#
+	# Check if already present
+	if key in repository:
+		print('Reference already loaded.')
+		if file_exists:
+			ui = input('Delete file? (Yes=y, No) ')
+			if ui == 'y': os.remove(filepath)
+		#
+		return False
+	#
+	# Get the bib
+	bib, url = get_bib(key)
+	question = (
+		'Could not retrieve bibtex for key {}, file {}'
+		', retry? (Skip=s, Manually=m, Retry=r, New key) '.format(key, filepath)
+	)
+	while not len(bib):
+		ui = input(question).strip().lower()
+		if ui == 's': return None, None
+		elif ui == 'm':
+			bib = edit_bibtex_manually(bib)
+			continue
+		#
+		elif ui == 'r': continue
+		else: return add_article_recur_A(ui, filepath, file_exists, viewer_proc, repository, config)
+	#
+	return add_article_recur_B(key, bib, url, filepath, file_exists, text, viewer_proc, repository, config)
+#
+
+def add_article_recur_B(key, bib, url, filepath, file_exists, text, viewer_proc, repository, config):
+	"""
+		Does bibtex match?
+	"""
+	clear_screen()
+	ui = input(
+		'Found this bibtex:\n\n{}\n\nDoes it match the reference? '
+		'(Skip=s, Edit=e, New key=..., Yes): '.format(bib)
+	).strip().lower()
+	if not len(ui): return add_article_recur_C(key, bib, url, filepath, file_exists, text, viewer_proc, repository, config)
+	elif ui == 's': return False
+	elif ui == 'e':
+		bib = edit_bibtex_manually(bib)
+		return add_article_recur_C(key, bib, url, filepath, file_exists, text, viewer_proc, repository, config)
+	#
+	else: return add_article_recur_A(ui, filepath, file_exists, text, viewer_proc, repository, config) # New key entered
+#
+
+def add_article_recur_C(key, bib, url, filepath, file_exists, text, viewer_proc, repository, config):
+	"""
+		Check validity of bib and finalise
+	"""
+	# Check for non-asciis
+	if is_non_ascii(bib):
+		# Change bib to something more reasonable
+		bib = unicode_to_latex(
+			bib,
+			non_ascii_only=True,
+			replacement_latex_protection='braces-all',
+			unknown_char_warning=False
+		)
+		question = (
+			'Received invalid bibtex for {}, tried to fix it:\n\n{}\n\n'
+			'Adjust manually? (Skip=s, Edit=e, All good) '
+		).format(filepath, bib)
+		clear_screen()
+		ui = input(question).strip().lower()
+		if ui == 's': return False
+		elif ui == 'e':
+			bib = edit_bibtex_manually(bib)
+			return add_article_recur_C(bib, filepath, file_exists, text, viewer_proc, repository, config)
+		#
+	#
+	duck = finalise_citation(bib)
+	if not duck:
+		print("Could not parse bibtex.")
+		return False
+	#
+	bib, target_dir, target_filename = duck
+
+	# Download file if required
+	if filepath == '-':
+		website = requests.get(url)
+		while website.ok:
+			ui = input('Could not load pdf from arXiv {} (Skip=s, Retry): '.format(url))
+			if ui == 's': return False
+			website = requests.get(url)
+		#
+		handle, filepath = tempfile.mkstemp()
+		with open(handle, 'wb') as f:
+			f.write(website.content)
+		#
+	#
+
+	# Get pdf text if not already done (when searching a key)
+	if not len(text): text = get_text(filepath)
+
+	# Save changes
+	write_celsus_file(target_filename, key, bib, text)
+
+	# Add to repo
+	repository[key] = None # No entry needed, only key
+
+	# Generate target path
+	if not os.path.exists(target_dir): os.makedirs(target_dir)
+	# Move file
+	try: shutil.move(filepath, target_filename)
+	except:
+		print('Could not move file {} to {}.'.format(filepath, target_filename))
+		return False
+	#
+	return True
+#
+
+def add_article(key, filepath, repository, config):
+	# Check file
+	must_download_file = (filepath == '-')
+	file_exists = ((not must_download_file) and os.path.exists(filepath))
+	if (not must_download_file) and (not file_exists):
+		print('File not found {}.'.format(filepath))
+		return False
+	#
+	# Is it pdf?
+	if file_exists and not filepath.endswith('.pdf'):
+		print('Only pdf files are supported.')
+		return False
+	#
+	viewer_proc = None
+	result = add_article_recur_A(key, filepath, file_exists, '', viewer_proc, repository, config)
+	if is_alive(viewer_proc): viewer_proc.terminate()
+	return result
+#
+
+
+
+
 
 # Execute commands
 config = get_config()
@@ -233,300 +464,11 @@ elif args.command == 'add':
 	repository, path = get_active_repository(config, load=ONLY_KEY)
 
 	# Iterate arguments
-	viewer_proc = None
 	for i in range(0, l, 2):
 		filepath, key = files_and_keys[i:i+2]
-		print('\nProcessing {}'.format(filepath))
-
-		# Close viewer from last iteration if still open
-		if is_alive(viewer_proc): viewer_proc.terminate()
-
-		# Defaults
-		bib = ''
-		text = None
-		skip = False
-		manual = False
-		download = False
-		check_key = False
-		edit_flag = False
-		viewer_proc = None
-
-		# Check if file exists
-		file_exists = (filepath != '-' and os.path.exists(filepath))
-		# Is it pdf?
-		if file_exists and not filepath.endswith('.pdf'):
-			print('Only pdf files are supported.')
-			continue
-		#
-
-		# Check if key is given, find out if not
-		if key == '-':
-			if not file_exists:
-				print('File {} does not exist.'.format(filepath))
-				continue
-			#
-			text = get_text(filepath)
-			key = find_key(text)
-			if len(key) == 0:
-				viewer_proc = open_viewer(filepath, config)
-				key = input(
-					'Could not identify key of {}, please find it manually (Skip): '.format(filepath)
-				).strip()
-				if len(key) == 0: continue
-			#
-			else: check_key = True
-		#
-
-		# Check if already present
-		if not check_key and key in repository:
-			ui = input('Reference already loaded, delete file? (Yes=y, No) ')
-			if ui == 'y': os.remove(filepath)
-			continue
-		#
-
-		# Check key and bibtex
-		while True:
-			# Distinguish between DOI, arxiv and manual
-			if is_doi(key):
-				get_bib = lambda key: (doi2bib(key), '')
-				download = False
-				manual = False
-			#
-			elif is_arxiv(key):
-				get_bib = lambda key: arxiv2bib(key)
-				download = True
-				manual = False
-			#
-			else:
-				get_bib = None
-				download = False
-				manual = True
-				ui = input('Key is no DOI or arXiv ID, enter another key? (No=n, Yes) ')
-				if not is_alive(viewer_proc): viewer_proc = open_viewer(filepath, config)
-				if ui == 'n': break
-				if not file_exists:
-					print('File {} does not exist.'.format(filepath))
-					skip = True
-					break
-				#
-			#
-
-			# Get bib corresponding to key
-			ui = ''
-			while not manual:
-				bib, url = get_bib(key)
-				if len(bib) > 0: break
-				ui = input(
-					'Could not retrieve bibtex for key {}, file {}'
-					', retry? (Skip=s, Manually=m, New key=k, Retry) '.format(key, filepath)
-				).strip().lower()
-				if ui == 's':
-					skip = True
-					break
-				#
-				if ui == 'm':
-					edit_flag = True
-					manual = True
-					break
-				#
-				elif ui == 'k': break
-			#
-
-			# Check if bibtex matches the reference
-			if not skip and file_exists and not is_alive(viewer_proc):
-				viewer_proc = open_viewer(filepath, config)
-			#
-			if not (skip or manual) and ui != 'k': # Sneaky
-				ui = input(
-					'Found this bibtex:\n\n{}\n\nDoes it match the reference? '
-					'(Skip=s, New key=k, Edit=e, Yes) '.format(bib)
-				).strip().lower()
-				if ui == 's':
-					skip = True
-					break
-				#
-				elif ui == 'e':
-					edit_flag = True
-					break
-				#
-				elif ui != 'k': break
-			#
-
-			# Is key valid but user wants to enter it manually?
-			if manual and edit_flag: break
-
-			# Ask for new key otherwise
-			if ui == 'k' or manual: # This must be an extra if, also sneaky
-				bib = ''
-				key = input('Please enter new key (Skip): ').strip().lower()
-				if len(key) == 0: skip = True
-			#
-
-			# Break if required
-			if skip: break
-		#
-		if skip:
-			print('Could not find a matching key or bibtex for {}.'.format(filepath))
-			continue
-		#
-
-		# Check if file is present
-		if not (download or file_exists):
-			print('File not found {}.'.format(filepath))
-			continue
-		#
-
-		# Check if already present
-		if check_key and key in repository:
-			ui = input('Reference already loaded, delete file? (Yes=y, No) ')
-			if ui == 'y': os.remove(filepath)
-			continue
-		#
-
-		# Check if manual adjustment is required
-		while True:
-			has_non_ascii = is_non_ascii(bib)
-			if len(bib) == 0 or has_non_ascii or manual or edit_flag:
-				# Change bib to something more reasonable
-				if len(bib) == 0:
-					if key.lower().find("ismrm") >= 0:
-						bib = empty_bib_article_ismrm 
-					#
-					else:
-						bib = empty_bib_article
-					#
-				#
-				elif has_non_ascii:
-					bib = unicode_to_latex(
-						bib,
-						non_ascii_only=True,
-						replacement_latex_protection='braces-all',
-						unknown_char_warning=False
-					)
-				#
-				if not edit_flag:
-					# Ask user what to do
-					ui = input(
-						((
-							'Received invalid bibtex for {}, tried to fix it:\n\n{}\n\n'
-							'Adjust manually? (Skip=s, Edit=e, All good) '
-						) if not manual else (
-							'Key for {} is no DOI or arXiv ID. '
-							'Please enter the bibtex manually '
-							'(Skip=s, Edit) '
-						)).format(filepath, bib)
-					).strip().lower()
-					if ui == 's':
-						bib = ''
-						break
-					#
-					elif ui == 'e':
-						if file_exists and not is_alive(viewer_proc):
-							viewer_proc = open_viewer(filepath, config)
-						#
-						if manual: bib = empty_bib_article
-					#
-					elif not manual: continue
-				#
-				else:
-					if file_exists and not is_alive(viewer_proc):
-						viewer_proc = open_viewer(filepath, config)
-					#
-				#
-
-				# Open file and editor
-				tmppath = os.path.join(path, 'tmpfile')
-				with open(tmppath, 'w') as f:
-					f.write(bib)
-				#
-				proc = open_editor(tmppath, config)
-				if proc.returncode != 0:
-					raise Exception('Editor could not be opened successfully.', file=stderr)
-				#
-				# Get file contents and remove
-				with open(tmppath, 'r') as f:
-					bib = f.read().strip()
-				#
-				os.remove(tmppath)
-				edit_flag = False
-				manual = False
-				continue
-			#
-
-			# Parse and check if anything wasn't found or if author contains any non-ascii chars
-			old_citation_key, author, year = parse(bib)
-			if (
-			any(v is None for v in (author, year, old_citation_key))
-			or is_non_ascii(author)
-			):
-				ui = input('Could not parse bib (Skip=s, Edit) ').strip().lower()
-
-				if ui == 's':
-					bib = ''
-					break
-				#
-				edit_flag = True
-			#
-			else: break
-		#
-		if len(bib) == 0:
-			print('Could not load bib from key {}.'.format(key))
-			continue
-		#
-
-		# Download file if required
-		if filepath == '-':
-			website = requests.get(url)
-			if not website.ok:
-				print('Could not load pdf from arXiv: {}.'.format(url))
-				continue
-			#
-			filepath = os.path.join(path, 'tmpfile.pdf')
-			with open(filepath, 'wb') as f:
-				f.write(website.content)
-			#
-		#
-
-		# Generate a filename from the citation key
-		target_dir = os.path.join(path, year)
-		found = False
-		extension = os.path.splitext(filepath)[1]
-		for letter in gen_letters():
-			citation_key = author + year + letter
-			target_filename = os.path.join(target_dir, citation_key + extension)
-			if not os.path.exists(target_filename):
-				found = True
-				break
-			#
-		#
-
-		# Modify bib to include citation key
-		if isinstance(old_citation_key, str):
-			bib = bib.replace(old_citation_key, citation_key, 1)
-		#
-		else: # In this case the key is integer, indicating where the key should be
-			bib = bib[:old_citation_key] + citation_key + bib[old_citation_key:]
-		#
-
-		# Generate target path
-		if not os.path.exists(target_dir): os.makedirs(target_dir)
-		# Move file
-		try:
-			shutil.move(filepath, target_filename)
-		#
-		except:
-			print('Could not move file {} to {}.'.format(filepath, target_filename))
-			continue
-		#
-
-		# Save changes
-		write_celsus_file(target_filename, key, bib, text)
-
-		# Add to repo
-		repository[key] = None # No entry needed, only key
-		print('Added {}.'.format(key))
+		if add_article(key, filepath, repository, config): continue
+		print('Failed to add {}.\n\n'.format(filepath))
 	#
-	if is_alive(viewer_proc): viewer_proc.terminate()
 #
 elif args.command == 'list':
 	# Load keys to search among from file

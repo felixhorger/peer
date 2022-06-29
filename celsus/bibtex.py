@@ -89,7 +89,17 @@ def doi2bib(doi):
 	if not website.ok:
 		return ''
 	#
-	return website.text
+	bib = website.text
+	match = re.search(r'\s*month.*', bib.casefold())
+	if match is not None:
+		index = match.start()
+		start_index = bib.find("{", index)
+		end_index = bib.find("}", start_index+1)
+		if start_index > -1 and end_index > -1:
+			bib = bib[:start_index] + bib[start_index+1:end_index] + bib[end_index+1:]
+		#
+	#
+	return bib
 #
 
 def arxiv2bib(arxiv_id):
@@ -125,8 +135,9 @@ def arxiv2bib(arxiv_id):
 		elif name == 'date':
 			date = tag.get('content')
 			date = datetime.datetime.strptime(date, '%Y/%m/%d')
-			citation['year'] = date.strftime('%Y')
-			citation['month'] = date.strftime('%b').lower()
+			# Year and month don't need braces, handle them extra
+			year = date.strftime('%Y')
+			month = date.strftime('%b').lower()
 		#
 		else:
 			citation[name] = tag.get('content')
@@ -136,7 +147,7 @@ def arxiv2bib(arxiv_id):
 	bib = (
 		'@article{' + arxiv_id + ',\n'
 		+ ',\n'.join(['\t{} = {{{}}}'.format(key, value) for key, value in citation.items()])
-		+ '\n}'
+		+ ',\n\t{} = {}\n\t{} = {}\n}}'.format("month", month, "year", year) 
 	)
 	return bib, url
 #
