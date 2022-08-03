@@ -288,7 +288,21 @@ def add_article_recur_A(key, filepath, file_exists, text, viewer_proc, repositor
 				).strip()
 			#
 		#
-		else: key = input('Key is no DOI or arXiv ID, enter another key? (Key=..., Skip) ')
+		else:
+			ui = input('Key is no DOI or arXiv ID, enter another key? (Yes=y, user defined key=n, Skip) ')
+			if ui == 'y':
+				key == input('Enter a new key: ')
+			elif ui == 'n':
+				if key in repository:
+					print('Reference already loaded.')
+					# Don't delete here, because it is likely a wrong key
+					return False
+				#
+				bib = edit_bibtex_manually(empty_bib_article)
+				return add_article_recur_C(key, bib, '', filepath, file_exists, text, viewer_proc, repository, config)
+			#
+			else: key = ''
+		#
 		if not len(key): return False
 		return add_article_recur_A(key, filepath, file_exists, text, viewer_proc, repository, config)
 	#
