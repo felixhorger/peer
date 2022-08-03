@@ -22,7 +22,7 @@ BIB_AND_CONTENT = 2
 re_doi_in_text = re.compile(
 	r'(^|.*\s)'
 	r'(Digital Object Identifier\s*|Digital Object Identiﬁer\s*'
-	'|doi:{0,1}\s*|DOI:{0,1}\s*|[htps:\.dx/w]*doi\.org/)('
+	'|doi:{0,1}\s*|DOI[:.]{0,1}\s*|[htps:\.dx/w]*doi\.org/)('
 	+ re_doi.pattern[:-1] +
 	r'?)(|\.)($|\s+.*)'
 )
