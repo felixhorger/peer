@@ -198,7 +198,7 @@ from celsus.latex import is_non_ascii, unicode_to_latex
 is_alive = lambda process: process is not None and process.poll() is None
 clear_screen = lambda: print('\033[2J\033[H')
 
-def edit_bibtex_manually(bib):
+def edit_bibtex_manually(bib, key):
 	if len(bib) == 0:
 		if key.lower().find("ismrm") >= 0: bib = empty_bib_article_ismrm 
 		else: bib = empty_bib_article
@@ -228,7 +228,7 @@ def finalise_citation(bib):
 	# Add letter(s) if citation key is already occupied
 	target_dir = os.path.join(path, year)
 	found = False
-	extension = os.path.splitext(filepath)[1]
+	extension = os.path.splitext(filepath)[1].lower()
 	for letter in gen_letters():
 		citation_key = author + year + letter
 		target_filename = os.path.join(target_dir, citation_key + extension)
@@ -247,11 +247,12 @@ def finalise_citation(bib):
 	return bib, target_dir, target_filename
 #
 
-def add_article_recur_A(key, filepath, file_exists, text, viewer_proc, repository, config):
+def add_article_recur_A(key, filepath, file_exists, text, repository, config):
 	"""
 		Gets the key and a function to get the bib
 		then calls stage 2
 	"""
+	global viewer_proc
 	# Check key
 	if key == '-':
 		key_is_valid = True
@@ -289,7 +290,7 @@ def add_article_recur_A(key, filepath, file_exists, text, viewer_proc, repositor
 			#
 		#
 		else:
-			ui = input('Key is no DOI or arXiv ID, enter another key? (Yes=y, user defined key=n, Skip) ')
+			ui = input('Key is no DOI or arXiv ID, enter another key? (Yes=y, User defined key=n, Skip) ')
 			if ui == 'y':
 				key == input('Enter a new key: ')
 			elif ui == 'n':
@@ -298,13 +299,13 @@ def add_article_recur_A(key, filepath, file_exists, text, viewer_proc, repositor
 					# Don't delete here, because it is likely a wrong key
 					return False
 				#
-				bib = edit_bibtex_manually(empty_bib_article)
-				return add_article_recur_C(key, bib, '', filepath, file_exists, text, viewer_proc, repository, config)
+				bib = edit_bibtex_manually('', key)
+				return add_article_recur_C(key, bib, '', filepath, file_exists, text, repository, config)
 			#
 			else: key = ''
 		#
 		if not len(key): return False
-		return add_article_recur_A(key, filepath, file_exists, text, viewer_proc, repository, config)
+		return add_article_recur_A(key, filepath, file_exists, text, repository, config)
 	#
 	# Check if already present
 	if key in repository:
@@ -325,37 +326,39 @@ def add_article_recur_A(key, filepath, file_exists, text, viewer_proc, repositor
 		ui = input(question).strip().lower()
 		if ui == 's': return None, None
 		elif ui == 'm':
-			bib = edit_bibtex_manually(bib)
+			bib = edit_bibtex_manually(bib, key)
 			continue
 		#
 		elif ui == 'r': continue
-		else: return add_article_recur_A(ui, filepath, file_exists, viewer_proc, repository, config)
+		else: return add_article_recur_A(ui, filepath, file_exists, repository, config)
 	#
-	return add_article_recur_B(key, bib, url, filepath, file_exists, text, viewer_proc, repository, config)
+	return add_article_recur_B(key, bib, url, filepath, file_exists, text, repository, config)
 #
 
-def add_article_recur_B(key, bib, url, filepath, file_exists, text, viewer_proc, repository, config):
+def add_article_recur_B(key, bib, url, filepath, file_exists, text, repository, config):
 	"""
 		Does bibtex match?
 	"""
+	global viewer_proc
 	clear_screen()
 	ui = input(
 		'Found this bibtex:\n\n{}\n\nDoes it match the reference? '
 		'(Skip=s, Edit=e, New key=..., Yes): '.format(bib)
 	).strip().lower()
-	if not len(ui): return add_article_recur_C(key, bib, url, filepath, file_exists, text, viewer_proc, repository, config)
+	if not len(ui): return add_article_recur_C(key, bib, url, filepath, file_exists, text, repository, config)
 	elif ui == 's': return False
 	elif ui == 'e':
-		bib = edit_bibtex_manually(bib)
-		return add_article_recur_C(key, bib, url, filepath, file_exists, text, viewer_proc, repository, config)
+		bib = edit_bibtex_manually(bib, key)
+		return add_article_recur_C(key, bib, url, filepath, file_exists, text, repository, config)
 	#
-	else: return add_article_recur_A(ui, filepath, file_exists, text, viewer_proc, repository, config) # New key entered
+	else: return add_article_recur_A(ui, filepath, file_exists, text, repository, config) # New key entered
 #
 
-def add_article_recur_C(key, bib, url, filepath, file_exists, text, viewer_proc, repository, config):
+def add_article_recur_C(key, bib, url, filepath, file_exists, text, repository, config):
 	"""
 		Check validity of bib and finalise
 	"""
+	global viewer_proc
 	# Check for non-asciis
 	if is_non_ascii(bib):
 		# Change bib to something more reasonable
@@ -373,8 +376,8 @@ def add_article_recur_C(key, bib, url, filepath, file_exists, text, viewer_proc,
 		ui = input(question).strip().lower()
 		if ui == 's': return False
 		elif ui == 'e':
-			bib = edit_bibtex_manually(bib)
-			return add_article_recur_C(bib, filepath, file_exists, text, viewer_proc, repository, config)
+			bib = edit_bibtex_manually(bib, key)
+			return add_article_recur_C(bib, filepath, file_exists, text, repository, config)
 		#
 	#
 	duck = finalise_citation(bib)
@@ -427,12 +430,11 @@ def add_article(key, filepath, repository, config):
 		return False
 	#
 	# Is it pdf?
-	if file_exists and not filepath.endswith('.pdf'):
+	if file_exists and not filepath.lower().endswith('.pdf'):
 		print('Only pdf files are supported.')
 		return False
 	#
-	viewer_proc = None
-	result = add_article_recur_A(key, filepath, file_exists, '', viewer_proc, repository, config)
+	result = add_article_recur_A(key, filepath, file_exists, '', repository, config)
 	if is_alive(viewer_proc): viewer_proc.terminate()
 	return result
 #
@@ -478,6 +480,7 @@ elif args.command == 'add':
 	repository, path = get_active_repository(config, load=ONLY_KEY)
 
 	# Iterate arguments
+	viewer_proc = None
 	for i in range(0, l, 2):
 		filepath, key = files_and_keys[i:i+2]
 		if add_article(key, filepath, repository, config): continue
@@ -581,7 +584,7 @@ elif args.command == 'list':
 		#
 		collected = []
 		for key in found:
-			viewer_proc = open_viewer(os.path.join(root_path, repository[key][0]), config)
+			viewer_proc = [open_viewer(os.path.join(root_path, repository[key][0]), config)]
 			ui = input('Add reference to list? (Stop=s, Yes=y, No) ').strip().lower()
 			if ui == 's':
 				if is_alive(viewer_proc): viewer_proc.terminate()

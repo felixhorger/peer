@@ -53,13 +53,13 @@ empty_bib_article = (
 )
 
 empty_bib_article_ismrm = (
-	'@inproceedings{,'
-		'year = {},'
-		'pages = {},'
-		'author = {},'
-		'title = {},'
-		'booktitle = {Proceedings th Scientific Meeting, International Society for Magnetic Resonance in Medicine}'
-		'address = {},'
+	'@inproceedings{,\n'
+		'\tyear = {},\n'
+		'\tpages = {},\n'
+		'\tauthor = {},\n'
+		'\ttitle = {},\n'
+		'\tbooktitle = {Proceedings th Scientific Meeting, International Society for Magnetic Resonance in Medicine}\n'
+		'\taddress = {}\n'
 	'}'
 )
 
