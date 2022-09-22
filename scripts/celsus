@@ -92,6 +92,7 @@ parser_list.add_argument(
 )
 parser_list.add_argument(
 	'--include',
+	nargs='+',
 	type=str,
 	metavar='FILENAME',
 	help='Only consider references listed in this file '
@@ -99,6 +100,7 @@ parser_list.add_argument(
 )
 parser_list.add_argument(
 	'--exclude',
+	nargs='+',
 	type=str,
 	metavar='FILENAME',
 	help='Analogue to --include, but listed references are not considered '
@@ -254,6 +256,7 @@ def add_article_recur_A(key, filepath, file_exists, text, repository, config):
 	"""
 	global viewer_proc
 	# Check key
+	key = key.lower()
 	if key == '-':
 		key_is_valid = True
 		get_bib = None
@@ -490,23 +493,29 @@ elif args.command == 'add':
 elif args.command == 'list':
 	# Load keys to search among from file
 	if args.include is not None:
-		if not os.path.isfile(args.include):
-			raise Exception('File {} not found.'.format(args.include))
+		load = []
+		for f in args.include:
+			if not os.path.isfile(f):
+				raise Exception('File {} not found.'.format(f))
+			#
+			with open(f, 'r') as f:
+				keys_to_use = f.read().strip().split('\n')
+			#
+			load.extend(key.lower() for key in keys_to_use)
 		#
-		with open(args.include, 'r') as f:
-			keys_to_use = f.read().split('\n')
-		#
-		load = tuple(key.lower() for key in keys_to_use)
 	#
 	else: load = BIB_AND_CONTENT if args.deep else BIB
 
 	# Get keys to exclude
 	if args.exclude is not None:
-		if not os.path.isfile(args.exclude):
-			raise Exception('File {} not found.'.format(args.exclude))
-		#
-		with open(args.exclude, 'r') as f:
-			keys_to_exclude = tuple(key.lower() for key in f.read().split('\n'))
+		keys_to_exclude = []
+		for f in args.exclude:
+			if not os.path.isfile(f):
+				raise Exception('File {} not found.'.format(f))
+			#
+			with open(f, 'r') as f:
+				keys_to_exclude.extend(key.lower() for key in f.read().strip().split('\n'))
+			#
 		#
 	#
 	else: keys_to_exclude = []
@@ -561,7 +570,7 @@ elif args.command == 'list':
 	#
 	else:
 		# Get repo
-		repository, root_path = get_active_repository(config, load)
+		repository, root_path = get_active_repository(config, load, keys_to_exclude)
 
 		# Search
 		found = []
@@ -584,7 +593,7 @@ elif args.command == 'list':
 		#
 		collected = []
 		for key in found:
-			viewer_proc = [open_viewer(os.path.join(root_path, repository[key][0]), config)]
+			viewer_proc = open_viewer(os.path.join(root_path, repository[key][0]), config)
 			ui = input('Add reference to list? (Stop=s, Yes=y, No) ').strip().lower()
 			if ui == 's':
 				if is_alive(viewer_proc): viewer_proc.terminate()
