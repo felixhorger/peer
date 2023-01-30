@@ -408,14 +408,15 @@ def add_article_recur_C(key, bib, url, filepath, file_exists, text, repository, 
 	# Get pdf text if not already done (when searching a key)
 	if not len(text): text = get_text(filepath)
 
+	# Generate target path
+	if not os.path.exists(target_dir): os.makedirs(target_dir)
+
 	# Save changes
 	write_celsus_file(target_filename, key, bib, text)
 
 	# Add to repo
 	repository[key] = None # No entry needed, only key
 
-	# Generate target path
-	if not os.path.exists(target_dir): os.makedirs(target_dir)
 	# Move file
 	try: shutil.move(filepath, target_filename)
 	except:
