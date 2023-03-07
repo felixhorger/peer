@@ -394,7 +394,7 @@ def add_article_recur_C(key, bib, url, filepath, file_exists, text, repository, 
 	# Download file if required
 	if filepath == '-':
 		website = requests.get(url)
-		while website.ok:
+		while not website.ok:
 			ui = input('Could not load pdf from arXiv {} (Skip=s, Retry): '.format(url))
 			if ui == 's': return False
 			website = requests.get(url)
