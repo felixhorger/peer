@@ -58,7 +58,7 @@ empty_bib_article_ismrm = (
 		'\tpages = {},\n'
 		'\tauthor = {},\n'
 		'\ttitle = {},\n'
-		'\tbooktitle = {Proceedings th Scientific Meeting, International Society for Magnetic Resonance in Medicine}\n'
+		'\tbooktitle = {Proceedings th Scientific Meeting, International Society for Magnetic Resonance in Medicine},\n'
 		'\taddress = {}\n'
 	'}'
 )
@@ -147,7 +147,7 @@ def arxiv2bib(arxiv_id):
 	bib = (
 		'@article{' + arxiv_id + ',\n'
 		+ ',\n'.join(['\t{} = {{{}}}'.format(key, value) for key, value in citation.items()])
-		+ ',\n\t{} = {}\n\t{} = {}\n}}'.format("month", month, "year", year) 
+		+ ',\n\t{} = {},\n\t{} = {}\n}}'.format("month", month, "year", year)
 	)
 	return bib, url
 #
