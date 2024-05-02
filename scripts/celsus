@@ -7,6 +7,8 @@
 	Worst case do an automatic remove and readd, this might work.
 	add short versions of --open and similar.
 
+	TODO: deal with stupid new crossref formatting and also replace the -- dash unicode char which is used to indicate page ranges, maybe that happens already?
+
 '''
 
 # Parse arguments
@@ -14,13 +16,13 @@ import argparse
 parser = argparse.ArgumentParser(
 	formatter_class=argparse.RawTextHelpFormatter
 )
-parser.add_argument('--description', action='store_true')
+parser.add_argument('--description', action='store_true', help='detailed description of functionality')
 # Add the command subparser
 subparsers = parser.add_subparsers(dest='command')
 # use
 parser_use = subparsers.add_parser(
 	'use',
-	help='Initialise a new repository or activate an existing one.'
+	help='initialise a new repository or activate an existing one.'
 )
 parser_use.add_argument(
 	'path',
@@ -381,7 +383,7 @@ def add_article_recur_C(key, bib, url, filepath, file_exists, text, repository, 
 		if ui == 's': return False
 		elif ui == 'e':
 			bib = edit_bibtex_manually(bib, key)
-			return add_article_recur_C(bib, filepath, file_exists, text, repository, config)
+			return add_article_recur_C(key, bib, url, filepath, file_exists, text, repository, config)
 		#
 	#
 	duck = finalise_citation(bib)
