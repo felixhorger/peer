@@ -64,7 +64,7 @@ empty_bib_article_ismrm = (
 )
 
 # Regexes
-re_author = re.compile(r'\s+author[\s={\']+([\w\-\s\.,]+?)(\s+and\s+|\s*[\'}]).*')
+re_author = re.compile(r'\s+author[\s={\']+([\w\-\s\.,{}]+?(?=\s+and\s+.+|\s*[\'}]\s*,\s*$))') # Old version failed for braced dash in first author name: r'\s+author[\s={\']+([\w\-\s\.,]+?)(\s+and\s+|\s*[\'}]).*'
 re_year = re.compile(r'\s*year[\s={\']+([0-9]+).*')
 re_citation_key = re.compile(r'\s*@[a-zA-Z]+{(.*?),.*')
 re_doi = re.compile(r'10\.[0-9\.]+/[-_;:\.<>/()0-9a-zA-Z]+$')
@@ -90,6 +90,31 @@ def doi2bib(doi):
 		return ''
 	#
 	bib = website.text
+
+	# Reformat
+	print(repr(bib))
+	# Spaces/newlines
+	bib = bib[1:]
+	i = bib.find(' ')
+	j = i+1
+	while i != -1:
+		j = bib.find(',', j+1)
+		if j == -1: break
+		num_open = bib.count('{', i, j)
+		num_closed = bib.count('}', i, j)
+		if num_open > num_closed: continue
+		bib = bib[:i] + '\n\t' + bib[i+1:]
+		i = bib.find(' ', j+1)
+		j = i+1
+		print(repr(bib))
+	#
+	bib = bib[:i] + '\n\t' + bib[i+1:]
+	i = bib.rfind(' ')
+	bib = bib[:i] + '\n' + bib[i+1:]
+	# Keep this for debug reasons
+	print(repr(bib))
+
+	# Month
 	match = re.search(r'\s*month.*', bib.casefold())
 	if match is not None:
 		index = match.start()
