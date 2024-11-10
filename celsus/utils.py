@@ -61,7 +61,7 @@ def write_config(config):
 #
 
 def get_active_repository(config, load=ONLY_KEY, exclude=[]):
-	''' Load the active repository.
+	''' Load the active repository. From where? how? stupid description past felix arg ...
 
 	Arguments:
 		> config: dictionary containing the celsus config.

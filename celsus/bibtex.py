@@ -91,6 +91,8 @@ def doi2bib(doi):
 	#
 	bib = website.text
 
+	# Crossref doing an absolutely horrendous job formatting bibtex :(
+
 	# Reformat
 	print(repr(bib))
 	# Spaces/newlines
@@ -114,16 +116,46 @@ def doi2bib(doi):
 	# Keep this for debug reasons
 	print(repr(bib))
 
-	# Month
-	match = re.search(r'\s*month.*', bib.casefold())
+	# Title
+	# Remove <scp> whatever that is
+	bib = re.sub(r'</*scp>', '', bib)
+	# Encapsulate capital letters/words in parenthesis
+	match = re.search(r'\s*title={', bib)
+	if match is not None:
+		match_close = re.search(r'}', bib[match.end():])
+		words = bib[match.end():match.end()+match_close.end()-1]
+		encapsulated_words = []
+		for w in words.split(' '):
+			if not any(c.isupper() for c in w):
+				encapsulated_words.append(w)
+				continue
+			#
+			# Encapsulate
+			encapsulated_words.append('{' + w + '}')
+		#
+		words = " ".join(encapsulated_words)
+		bib = bib[:match.end()] + words + bib[match.end()+match_close.end()-1:]
+	#
+
+	# Month - remove parentheses
+	match = re.search(r'\s*month=', bib.casefold())
 	if match is not None:
 		index = match.start()
-		start_index = bib.find("{", index)
-		end_index = bib.find("}", start_index+1)
+		start_index = bib.find('{', index)
+		end_index = bib.find('}', start_index+1)
 		if start_index > -1 and end_index > -1:
 			bib = bib[:start_index] + bib[start_index+1:end_index] + bib[end_index+1:]
 		#
 	#
+
+	# Pages - add parentheses
+	match = re.search(r'pages\s*=\s*', bib)
+	if match is not None and bib[match.end()] != '{':
+		# Insert paranthesis
+		match_pages = re.search(r'([0-9]+)[^0-9]+([0-9]+)', bib[match.end():])
+		bib = bib[:match.end()] + '{' + match_pages.group(1) + "--" + match_pages.group(2) + '}' + bib[match.end() + match_pages.end():]
+	#
+
 	return bib
 #
 
