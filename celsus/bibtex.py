@@ -119,19 +119,19 @@ def doi2bib(doi):
 	# Title
 	# Remove <scp> whatever that is
 	bib = re.sub(r'</*scp>', '', bib)
-	# Encapsulate capital letters/words in parenthesis
+	# Encapsulate words with only capital letters or numbers in parenthesis
 	match = re.search(r'\s*title={', bib)
 	if match is not None:
 		match_close = re.search(r'}', bib[match.end():])
 		words = bib[match.end():match.end()+match_close.end()-1]
 		encapsulated_words = []
 		for w in words.split(' '):
-			if not any(c.isupper() for c in w):
-				encapsulated_words.append(w)
+			if all(c.isupper() or c.isnumeric() for c in w):
+				# Encapsulate
+				encapsulated_words.append('{' + w + '}')
 				continue
 			#
-			# Encapsulate
-			encapsulated_words.append('{' + w + '}')
+			encapsulated_words.append(w)
 		#
 		words = " ".join(encapsulated_words)
 		bib = bib[:match.end()] + words + bib[match.end()+match_close.end()-1:]
