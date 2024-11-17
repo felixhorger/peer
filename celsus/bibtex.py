@@ -124,10 +124,16 @@ def doi2bib(doi):
 	if match is not None:
 		match_close = re.search(r'}', bib[match.end():])
 		words = bib[match.end():match.end()+match_close.end()-1]
-		encapsulated_words = []
-		for w in words.split(' '):
-			if all(c.isupper() or c.isnumeric() for c in w):
-				# Encapsulate
+		words = words.split(' ')
+		# Encapsulate first word only if all are caps or numeric
+		if all(c.isupper() or c.isnumeric() for c in words[0]):
+			encapsulated_words = ['{' + words[0] + '}']
+		else:
+			encapsulated_words = [words[0]]
+		#
+		# Encapsulate other words if they have any capital letter in them
+		for w in words[1:]: # Skip first word
+			if any(c.isupper() for c in w): #and all(c.isupper() or c.isnumeric() for c in w):
 				encapsulated_words.append('{' + w + '}')
 				continue
 			#
@@ -155,6 +161,9 @@ def doi2bib(doi):
 		match_pages = re.search(r'([0-9]+)[^0-9]+([0-9]+)', bib[match.end():])
 		bib = bib[:match.end()] + '{' + match_pages.group(1) + "--" + match_pages.group(2) + '}' + bib[match.end() + match_pages.end():]
 	#
+
+	# Pages - remove weird unicode signs observed sometimes
+	bib = re.sub(r'pages\s*=\s*\{([0-9]+)â€“([0-9]+)\}', r'pages={\1--\2}', bib, flags=re.UNICODE)
 
 	return bib
 #
