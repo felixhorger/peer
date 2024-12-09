@@ -125,15 +125,10 @@ def doi2bib(doi):
 		match_close = re.search(r'}', bib[match.end():])
 		words = bib[match.end():match.end()+match_close.end()-1]
 		words = words.split(' ')
-		# Encapsulate first word only if all are caps or numeric
-		if all(c.isupper() or c.isnumeric() for c in words[0]):
-			encapsulated_words = ['{' + words[0] + '}']
-		else:
-			encapsulated_words = [words[0]]
-		#
-		# Encapsulate other words if they have any capital letter in them
-		for w in words[1:]: # Skip first word
-			if any(c.isupper() for c in w): #and all(c.isupper() or c.isnumeric() for c in w):
+		# Encapsulate words if they have no lower case letter in them
+		encapsulated_words = []
+		for w in words:
+			if all(not c.islower() for c in w):
 				encapsulated_words.append('{' + w + '}')
 				continue
 			#
@@ -144,14 +139,11 @@ def doi2bib(doi):
 	#
 
 	# Month - remove parentheses
-	match = re.search(r'\s*month=', bib.casefold())
+	match = re.search(r'\s*month\s*=\s*{', bib.casefold())
 	if match is not None:
-		index = match.start()
-		start_index = bib.find('{', index)
-		end_index = bib.find('}', start_index+1)
-		if start_index > -1 and end_index > -1:
-			bib = bib[:start_index] + bib[start_index+1:end_index] + bib[end_index+1:]
-		#
+		index = bib.find('}', match.end())
+		if index == -1: raise Exception("Curly braces not closed for month?")
+		bib = bib[:match.end()-1] + bib[match_end():index] + bib[index+1:]
 	#
 
 	# Pages - add parentheses
@@ -159,11 +151,17 @@ def doi2bib(doi):
 	if match is not None and bib[match.end()] != '{':
 		# Insert paranthesis
 		match_pages = re.search(r'([0-9]+)[^0-9]+([0-9]+)', bib[match.end():])
+		#if match_pages is not None:
 		bib = bib[:match.end()] + '{' + match_pages.group(1) + "--" + match_pages.group(2) + '}' + bib[match.end() + match_pages.end():]
+		#
 	#
 
 	# Pages - remove weird unicode signs observed sometimes
 	bib = re.sub(r'pages\s*=\s*\{([0-9]+)â€“([0-9]+)\}', r'pages={\1--\2}', bib, flags=re.UNICODE)
+
+	# Ampersand
+	bib = re.sub(r'([^{])&([^}])', r'\1{\&}\2', bib)
+	bib = re.sub(r'{&}', r'{\&}', bib)
 
 	return bib
 #

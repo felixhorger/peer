@@ -620,7 +620,7 @@ elif args.command == 'list':
 	#
 #
 elif args.command == 'remove':
-	keys = args.keys
+	keys = [key.lower() for key in args.keys]
 	args_open = not args.noopen
 
 	# Load the repo
