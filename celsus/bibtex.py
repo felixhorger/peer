@@ -163,6 +163,9 @@ def doi2bib(doi):
 	bib = re.sub(r'([^{])&([^}])', r'\1{\&}\2', bib)
 	bib = re.sub(r'{&}', r'{\&}', bib)
 
+	# Dash
+	bib = re.sub(r'–', r'--', bib)
+
 	return bib
 #
 
