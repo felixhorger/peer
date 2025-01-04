@@ -64,7 +64,7 @@ empty_bib_article_ismrm = (
 )
 
 # Regexes
-re_author = re.compile(r'\s+author[\s={\']+([\w\-\s\.,{}]+?(?=\s+and\s+.+|\s*[\'}]\s*,\s*$))') # Old version failed for braced dash in first author name: r'\s+author[\s={\']+([\w\-\s\.,]+?)(\s+and\s+|\s*[\'}]).*'
+re_author = re.compile(r'\s*author[\s={\']+([\w\-\s\.,{}\'\\]+?(?=\s+and\s+.+|\s*[\'}]\s*,\s*$))') # Old version failed for braced dash in first author name: r'\s+author[\s={\']+([\w\-\s\.,]+?)(\s+and\s+|\s*[\'}]).*'
 re_year = re.compile(r'\s*year[\s={\']+([0-9]+).*')
 re_citation_key = re.compile(r'\s*@[a-zA-Z]+{(.*?),.*')
 re_doi = re.compile(r'10\.[0-9\.]+/[-_;:\.<>/()0-9a-zA-Z]+$')
@@ -239,12 +239,12 @@ def parse(bib):
 			if a is not None:
 				# Would be too easy if there was a single convention
 				author = a.groups()[0]
-				if ',' in author:
-					author = author.split()[0].replace(',', '')
-				#
-				else:
-					author = author.split()[-1]
-				#
+				if ',' in author: author = author.split()[0]
+				else:             author = author.split()[-1]
+				# Remove everything in braces
+				author = re.sub('{.*}', '', author)
+				# Remove non-alphabetical characters
+				author = ''.join(c for c in author if c.isalpha())
 				continue
 			#
 		#
